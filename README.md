@@ -186,7 +186,7 @@ exports.recordTypes = {
             },
             'name': {
                 valueType: 'string',
-                validators: [ [ 'maxLength', 50 ] ]
+                validators: [ ['maxLength', 50] ]
             },
             'description': {
                 valueType: 'string',
@@ -194,7 +194,7 @@ exports.recordTypes = {
             },
             'price': {
                 valueType: 'number',
-                validators: [ [ 'range', 0.00, 999.99 ] ]
+                validators: [ ['range', 0.00, 999.99] ]
             },
             'available': {
                 valueType: 'boolean',
@@ -211,22 +211,22 @@ exports.recordTypes = {
             },
             'email': {
                 valueType: 'string',
-                validators: [ [ 'maxLength', 60 ], 'email', 'lowercase' ]
+                validators: [ ['maxLength', 60], 'email', 'lowercase' ]
             },
             'firstName': {
                 valueType: 'string',
                 column: 'fname',
-                validators: [ [ 'maxLength', 30 ] ]
+                validators: [ ['maxLength', 30] ]
             },
             'lastName': {
                 valueType: 'string',
                 column: 'lname',
-                validators: [ [ 'maxLength', 30 ] ]
+                validators: [ ['maxLength', 30] ]
             },
             'passwordDigest': {
                 valueType: 'string',
                 column: 'pwd_digest',
-                validators: [ [ 'pattern', /[0-9a-f]{40}/ ] ]
+                validators: [ ['pattern', /[0-9a-f]{40}/] ]
             }
         }
     },
@@ -250,13 +250,13 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ [ 'oneOf', 'NEW', 'ACCEPTED', 'SHIPPED' ] ]
+                validators: [ ['oneOf', 'NEW', 'ACCEPTED', 'SHIPPED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
                 column: 'payment_txid',
                 optional: true,
-                validators: [ [ 'maxLength', 100 ] ]
+                validators: [ ['maxLength', 100] ]
             },
             'items': {
                 valueType: 'object[]',
@@ -274,7 +274,7 @@ exports.recordTypes = {
                     'quantity': {
                         valueType: 'number',
                         column: 'qty',
-                        validators: [ 'integer', [ 'range', 1, 255 ] ]
+                        validators: [ 'integer', ['range', 1, 255] ]
                     }
                 }
             }
@@ -286,3 +286,159 @@ exports.recordTypes = {
 The above definitions should be in large part self-explanatory. The framework module that will be working with these definitions&mdash;the module that provides the record types library&mdash;is [x2node-records](https://github.com/boylesoftware/x2node-records). See its manual for the record type definitions basics. We also utilize some extended definition attributes such as `validators` attribute provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module, and `table` and `column` attributes provided by the [x2node-dbos](https://github.com/boylesoftware/x2node-dbos) module.
 
 If you don't feel like reading the full documentation for those modules right at this moment, which is totally understandable, a few explanatory notes about the above:
+
+* At the top of the `recordTypes` object we have record type definitions by record type name (_Product_, _Account_ and _Order_). The properties of each record are defined by the `properties` object. The keys in the `properties` object are property names as they appear in the record JSON.
+
+* The mandatory `valueType` property definition attribute defines the type of the property as it appears in the record JSON. The valid types include the valid JSON types: `string`, `number`, `boolean` and `object` (for nested object property). To make a property a JSON array, the value type is appended with `[]` (so _Order_ record's `items` property is `object[]`, which means it's an array of nested objects).
+
+* A special `valueType` is used for properties that are references to records of other record types. The syntax is `ref(TargetRecordTypeName)`. See such properties as `accountRef` in the _Order_ record type and `productRef` in the _Order_'s nested `items` object. The references in _x2node_ records JSON are represented with strings that include the target record type name and the target record id separated with a hash (e.g. _Order#25_, _Product#3_). Also, the convention is to name reference properties with a "Ref" suffix (not enforced, just a suggestion!).
+
+* Attribute `role: 'id'` marks the record ID property. It is also used to mark the ID property in nested object arrays.
+
+* Scalar properties (not arrays) are by default required in records. To mark an optional record property `optional: true` attribute is used.
+
+* Record type definition attribute `table` is used to map the record type to the database table. If unspecified, the table is assumed to have the same name as the record type.
+
+* Property definition `column` attribute is used to map the property to the corresponding database column. By default, the column is assumed to have the same name as the property, so we use the `column` attribute only where it is not so.
+
+* Property definition attribute `validators` provides an array of constraints for the property values. In this example we only use built-in validators provided by the framework. See https://github.com/boylesoftware/x2node-validators#standard-validators for the standard validators list. Some validators are applied by the framework automatically. For example, if a property value type is declared to be a `number` and the client submits a record with a string via the API, the framework will reject such record.
+
+* Some validators are so called _normalizers_. They may modify the property value in some situations. See `lowercase` normalizer in the validators list of the `email` property on the _Account_ record type. When, for example, a new account record submitted via a `POST` to our application's _/accounts_ endpoint includes `email` property that contains uppercase letters, the framework will transform it to all lowercase before saving the account record to the database.
+
+* If a property is marked with a `modifiable: false` attribute, after a new record is created, the property value may not be changed via an update.
+
+* Nested object properties have their own nested `properties` definition attribute. If the property is an array, it has its own `table` attribute to map the values to the table. A mandatory `parentIdColumn` attribute links the table to the parent table. A property with `role: 'id'` is required in the nested object array.
+
+* The record type definitions are designed to be saveable as JSON. Keep that in mind as an option.
+
+### The Web Service
+
+Now that we have our database and our record type definitions, we are ready to create the first iteration of our web-service.
+
+First, let's add modules that we are going to use to our project. We will need the records module for our record types library:
+
+```shell
+$ npm install --save x2node-records
+```
+
+We will need the DBOs module to access our database:
+
+```shell
+$ npm install --save x2node-dbos
+```
+
+We will also need the database driver module:
+
+```shell
+$ npm install --save mysql
+```
+
+Now, we will need the web-services module for the basic RESTful API functionality:
+
+```shell
+$ npm install --save x2node-ws
+```
+
+And we will need an advanced RESTful API resources module that will make our lives much easier:
+
+```shell
+$ npm install --save x2node-ws-resources
+```
+
+And finally, we will want to keep our runtime environment information, such as the database connection information, in a `.env` file, so let's add the `dotenv` module:
+
+```shell
+$ npm install --save dotenv
+```
+
+We can create a `.env` file now and place it in our project directory. Something like this:
+
+```shell
+#
+# Port, on which our web-service will be listening.
+#
+HTTP_PORT=3001
+
+#
+# Database connection information.
+#
+DB_HOST=localhost
+DB_NAME=x2tutorial
+DB_USER=x2tutorial
+DB_PASSWORD=x2tutorial
+```
+
+Now, let's create our top `server.js` file and place it in our project directory:
+
+```javascript
+'use strict';
+
+// load runtime environment configuration
+require('dotenv').load();
+
+// create database connections pool
+const pool = require('mysql').createPool({
+    connectionLimit: 5,
+    host: process.env['DB_HOST'],
+    port: process.env['DB_PORT'] || 3306,
+    database: process.env['DB_NAME'],
+    user: process.env['DB_USER'],
+    password: process.env['DB_PASSWORD']
+});
+
+// load framework modules
+const records = require('x2node-records');
+const dbos = require('x2node-dbos');
+const ws = require('x2node-ws');
+const resources = require('x2node-ws-resources');
+
+// build record types library (don't forget the DBOs extension)
+const recordTypes = records.with(dbos).buildLibrary(
+    require('./lib/record-type-defs.js'));
+
+// create DBO factory for our record types library, MySQL flavor
+const dboFactory = dbos.createDBOFactory(recordTypes, 'mysql');
+
+// wrap the database connections pool with a generic interface for the framework
+const ds = dboFactory.adaptDataSource(pool);
+
+// create resource endpoint handlers factory and pass our DBO factory to it
+const handlers = resources.createResourceHandlersFactory(ds, dboFactory);
+
+// assemble and run the web-service
+ws.createApplication()
+
+    // graceful shutdown, close the database connections pool
+    .on('shutdown', () => {
+        pool.end();
+    })
+
+    // add API endpoints
+    .addEndpoint(
+        '/products',
+        handlers.collectionResource('Product'))
+    .addEndpoint(
+        '/products/([1-9][0-9]*)',
+        handlers.individualResource('Product'))
+    .addEndpoint(
+        '/accounts',
+        handlers.collectionResource('Account'))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)',
+        handlers.individualResource('Account'))
+    .addEndpoint(
+        '/orders',
+        handlers.collectionResource('Order'))
+    .addEndpoint(
+        '/orders/([1-9][0-9]*)',
+        handlers.individualResource('Order'))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)/orders',
+        handlers.collectionResource('accountRef<-Order'))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)/orders/([1-9][0-9]*)',
+        handlers.individualResource('accountRef<-Order'))
+
+    // run the service
+    .run(Number(process.env['HTTP_PORT']));
+```

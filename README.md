@@ -105,7 +105,7 @@ CREATE TABLE accounts (
 CREATE TABLE orders (
     id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id INTEGER UNSIGNED NOT NULL,
-    placed_on CHAR(10) NOT NULL,
+    placed_on CHAR(10) NOT NULL, -- in YYYY-MM-DD format
     status ENUM('NEW', 'ACCEPTED', 'SHIPPED') NOT NULL,
     payment_txid VARCHAR(100), -- payments backend transaction id when ACCEPTED
     FOREIGN KEY (account_id) REFERENCES accounts (id)
@@ -141,5 +141,148 @@ Query OK, 0 rows affected (0.00 sec)
 MariaDB [(none)]> exit
 Bye
 
-$ mysql -ux2tutorial -px2tutorial x2tutorial < create-schema.sql
+$ mysql -ux2tutorial -px2tutorial x2tutorial < create-schema-mysql.sql
 ```
+
+## Project Setup
+
+_x2node_ modules are published in NPM, so let's setup our project using it. Let's create a directory called `x2tutorial` for our project and in it create our intial `package.json` file:
+
+```json
+{
+  "name": "x2tutorial",
+  "private": true
+}
+```
+
+We can also save our database schema creation script along with the project under, say, `misc/schema/create-schema-mysql.sql`. So that we have:
+
+```
+x2tutorial/
++--misc/
+|  +--schema/
+|     +--create-schema-mysql.sql
++--package.json
+```
+
+### Record Type Definitions
+
+We started our project with the database schema definition. Now, let's define our record types for the application and map them to the tables and columns in the database.
+
+For our application our records are going to be represented by JSON objects and that's what our exposed API will be operating with as well. Each record type will need a _record type definition_ that describes the shape of the record object, maps object properties to the database, establishes record relations, adds property value validation rules, etc. All of the application record type definitions together are assembled into the _record types library_, which is an object provided by the _x2node_ framework to the rest of the application and represents the application's data domain description. Other framework modules as well as the application's custom code use the record types library object to query the record types meta-data.
+
+Let's create a separate file under `lib/record-type-defs.js` where we are going to keep our record type definitions so that have all data structure related stuff in a single place:
+
+```javascript
+'use strict';
+
+exports.recordTypes = {
+    'Product': {
+        table: 'products',
+        properties: {
+            'id': {
+                valueType: 'number',
+                role: 'id'
+            },
+            'name': {
+                valueType: 'string',
+                validators: [ [ 'maxLength', 50 ] ]
+            },
+            'description': {
+                valueType: 'string',
+                optional: true
+            },
+            'price': {
+                valueType: 'number',
+                validators: [ [ 'range', 0.00, 999.99 ] ]
+            },
+            'available': {
+                valueType: 'boolean',
+                column: 'is_available'
+            }
+        }
+    },
+    'Account': {
+        table: 'accounts',
+        properties: {
+            'id': {
+                valueType: 'number',
+                role: 'id'
+            },
+            'email': {
+                valueType: 'string',
+                validators: [ [ 'maxLength', 60 ], 'email', 'lowercase' ]
+            },
+            'firstName': {
+                valueType: 'string',
+                column: 'fname',
+                validators: [ [ 'maxLength', 30 ] ]
+            },
+            'lastName': {
+                valueType: 'string',
+                column: 'lname',
+                validators: [ [ 'maxLength', 30 ] ]
+            },
+            'passwordDigest': {
+                valueType: 'string',
+                column: 'pwd_digest',
+                validators: [ [ 'pattern', /[0-9a-f]{40}/ ] ]
+            }
+        }
+    },
+    'Order': {
+        table: 'orders',
+        properties: {
+            'id': {
+                valueType: 'number',
+                role: 'id'
+            },
+            'accountRef': {
+                valueType: 'ref(Account)',
+                column: 'account_id',
+                modifiable: false
+            },
+            'placedOn': {
+                valueType: 'string',
+                column: 'placed_on',
+                validators: [ 'date' ],
+                modifiable: false
+            },
+            'status': {
+                valueType: 'string',
+                validators: [ [ 'oneOf', 'NEW', 'ACCEPTED', 'SHIPPED' ] ]
+            },
+            'paymentTransactionId': {
+                valueType: 'string',
+                column: 'payment_txid',
+                optional: true,
+                validators: [ [ 'maxLength', 100 ] ]
+            },
+            'items': {
+                valueType: 'object[]',
+                table: 'order_items',
+                parentIdColumn: 'order_id',
+                properties: {
+                    'id': {
+                        valueType: 'number',
+                        role: 'id'
+                    },
+                    'productRef': {
+                        valueType: 'ref(Product)',
+                        column: 'product_id'
+                    },
+                    'quantity': {
+                        valueType: 'number',
+                        column: 'qty',
+                        validators: [ 'integer', [ 'range', 1, 255 ] ]
+                    }
+                }
+            }
+        }
+    }
+};
+```
+
+The above definitions should be in large part self-explanatory. The framework module that will be working with these definitions&mdash;the module that provides the record types library&mdash;is [x2node-records](https://github.com/boylesoftware/x2node-records). See its manual for the record type definitions basics. We also utilize some extended definition attributes such as `validators` attribute provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module, and `table` and `column` attributes provided by the [x2node-dbos](https://github.com/boylesoftware/x2node-dbos) module.
+
+If you don't feel like reading the full documentation for those modules right at this moment, which is totally understandable, a few explanatory notes about the above:

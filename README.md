@@ -18,9 +18,9 @@ First, let's identify with what data objects our application is going to be work
 
 Our application is going to be working with the following major record types:
 
-* _Product_ - This is a descriptor of a product available in our online store. Every product will have a name, a description, an image, a price and an availability flag.
-* _Account_ - This is an account of a registered customer. It will include the person's name, E-mail address, payment method information, information used to authenticate (login) the customer.
-* _Order_ - This is an order placed by a customer for a number of products. The record will include information about when the order was placed, what customer placed the order, the order status ("new", "processing", "shipped"), order charge transaction ID and the order line items, each of which will include the ordered product and the ordered quantity.
+* _Product_ - This is a descriptor of a product available in our online store. Every product will have a name, a description, a price and an availability flag.
+* _Account_ - This is an account of a registered customer. It will include the person's name, E-mail address, information used to authenticate (login) the customer.
+* _Order_ - This is an order placed by a customer for a number of products. The record will include information about when the order was placed, what customer placed the order, the order status ("new", "accepted", "shipped"), order charge transaction ID and the order line items, each of which will include the ordered product and the ordered quantity.
 
 ### Actors
 
@@ -49,7 +49,7 @@ First, let's define the most essential API for our actors. This API will provide
 | _/accounts_             | `GET`    | _Admin_             | Will allow store admins to search the customer accounts. As with the _/products_ endpoint, the search parameters will be specified in the request URL parameters. Only admins will be allowed to list/search customer accounts.
 | _/accounts_             | `POST`   | _Everybody_         | This call will be used to create new customer accounts. For the purpose of this tutorial, this is a very simple call allowed to everybody, so everybody can registered. A real-life online store would probably have a more complex logic including account confirmation.
 | _/accounts/{accountId}_ | `GET`    | _Admin_, _Customer_ | Get customer account information. The customer is identified by the account ID in the URI. Admins can request information about any existing customer. A customer can request information only about him or herself (the ID in the URI must match the authenticated user ID).
-| _/accounts/{accountId}_ | `PATCH`  | _Admin, _Customer_  | Update customer account information. Admins can update any account, customers can update only their own accounts.
+| _/accounts/{accountId}_ | `PATCH`  | _Admin_, _Customer_ | Update customer account information. Admins can update any account, customers can update only their own accounts.
 | _/accounts/{accountId}_ | `DELETE` | _Admin_, _Customer_ | Permanently delete customer account. Admins can delete any account, customers can delete only their own accounts. Accounts are allowed to be deleted only if they don't have any orders.
 | _/orders_               | `GET`    | _Admin_             | List/search orders.
 | _/orders_               | `POST`   | _Admin_             | Create an order.
@@ -78,3 +78,48 @@ We will also need a special, non-resource endpoint to allow our users to login:
 | _/login_ | `POST` | Authenticate a user, which may be the store admin or a customer. The username and the password will be provided as the request parameters. The response will include an authentication token that can be used with subsequent API calls.
 
 Not every web-service handles initial user authentication (the user login) itself. These days standards like _OAuth2.0_ allow delegation of the authentication token issuing to a thrid-party. The web-service then merely verifies the authentication tokens it receives with the calls and matches them against its own user database. For the purpose of our tutorial, however, we are going to the our web-service handle user logins on its own.
+
+## The Database
+
+There is a long standing tradition in developing database-driven server-side applications to start with the database design. Let's honor this tradition and define our schema. For this tutorial we'll use _MySQL_ (the framework's SQL database access module also supports _PostgreSQL_ and will support other databases in the near future).
+
+Given our record types, the schema is straightforward:
+
+```sql
+CREATE TABLE products (
+    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	name VARCHAR(50) NOT NULL,
+	description TEXT,
+	price NUMERIC(5,2) NOT NULL,
+	is_available BOOLEAN NOT NULL
+);
+
+CREATE TABLE accounts (
+    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	email VARCHAR(60) NOT NULL UNIQUE, -- used as login name
+	fname VARCHAR(30) NOT NULL,
+	lname VARCHAR(30) NOT NULL,
+	pwd_digest CHAR(40) NOT NULL -- password SHA digest in hex encoding
+);
+
+CREATE TABLE orders (
+    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+	account_id INTEGER UNSIGNED NOT NULL,
+	placed_on CHAR(10) NOT NULL,
+	status ENUM('NEW', 'ACCEPTED', 'SHIPPED') NOT NULL,
+	txid VARCHAR(100), -- payments backend transaction id when ACCEPTED
+	FOREIGN KEY (account_id) REFERENCES accounts (id)
+);
+
+CREATE TABLE order_items (
+    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY, -- we'll need it later
+	order_id INTEGER UNSIGNED NOT NULL,
+	product_id INTEGER UNSIGNED NOT NULL,
+	qty TINYINT UNSIGNED NOT NULL,
+	FOREIGN KEY (order_id) REFERENCES orders (id),
+	FOREIGN KEY (product_id) REFERENCES products (id),
+	UNIQUE (order_id, product_id)
+);
+```
+
+You may notice that we added a synthetic primary key to the order items table, which is technically not needed for a fully normalized schema. We will need it later, however, as the framework will be relying on it to correctly process changes to the order items.

@@ -128,7 +128,7 @@ At the moment, the framework does not have a module that generates database sche
 
 So, go ahead, fire up your _MariaDB_, create a database, create a database user for your application and initialize the schema with the above DDL. Something like this:
 
-```shell
+```
 $ mysql -uroot -p
 ...
 

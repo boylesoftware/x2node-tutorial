@@ -472,6 +472,6 @@ You can test that it works with either `curl`:
 $ curl -v http://localhost:3001/products | python -mjson.tool
 ```
 
-Or use our simple API tested in a browser at [http://x2node.com/api-tester/]:
+Or use our simple API tested in a browser at (http://x2node.com/api-tester/):
 
 ![API Tester Screenshot](/api-tester-screen.png)

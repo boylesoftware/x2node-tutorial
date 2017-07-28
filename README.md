@@ -474,4 +474,4 @@ $ curl -v http://localhost:3001/products | python -mjson.tool
 
 Or use our simple API tested in a browser at [http://x2node.com/api-tester/]:
 
-!(api-tester-screen.png)
+!(/api-tester-screen.png)

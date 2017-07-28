@@ -250,7 +250,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneOf', 'NEW', 'ACCEPTED', 'SHIPPED'] ]
+                validators: [ ['oneof', 'NEW', 'ACCEPTED', 'SHIPPED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
@@ -442,3 +442,36 @@ ws.createApplication()
     // run the service
     .run(Number(process.env['HTTP_PORT']));
 ```
+
+By now, we should have the following project directory structure:
+
+```
+x2tutorial/
++--lib/
+|  +--record-type-defs.js
++--misc/
+|  +--schema/
+|     +--create-schema-mysql.sql
++--node_modules/
+|  +--...
++--.env
++--package-lock.json
++--package.json
++--server.js
+```
+
+And we are ready to run our web-service!
+
+```shell
+$ npm start
+```
+
+You can test that it works with either `curl`:
+
+```shell
+$ curl -v http://localhost:3001/products | python -mjson.tool
+```
+
+Or use our simple API tested in a browser at [http://x2node.com/api-tester/]:
+
+!(api-tester-screen.png)

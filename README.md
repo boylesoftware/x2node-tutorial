@@ -123,3 +123,23 @@ CREATE TABLE order_items (
 ```
 
 You may notice that we added a synthetic primary key to the order items table, which is technically not needed for a fully normalized schema. We will need it later, however, as the framework will be relying on it to correctly process changes to the order items.
+
+At the moment, the framework does not have a module that generates database schema for you automatically. We may develop such module in some future, but in any case, we recommend maintaining the database schema as a separate piece of your project. Yes, it introduces a task of maintaining your data sotrage definition in sync in two separate places&mdash;the database and your application&mdash;but it also gives you full control over the data storage intricacies (think indexes, tablespaces, collations, etc.). Your DBAs will thank you!
+
+So, go ahead, fire up your _MariaDB_, create a database, create a database user for your application and initialize the schema with the above DDL. Something like this:
+
+```shell
+$ mysql -uroot -p
+...
+
+MariaDB [(none)]> create database x2tutotial character set 'utf8';
+Query OK, 1 row affected (0.00 sec)
+
+MariaDB [(none)]> grant all on x2tutorial.* to 'x2tutorial'@'localhost' identified by 'x2tutorial';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [(none)]> exit
+Bye
+
+$ mysql -ux2tutorial -px2tutorial x2tutorial < create-schema.sql
+```

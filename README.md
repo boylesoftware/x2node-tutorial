@@ -165,6 +165,75 @@ x2tutorial/
 +--package.json
 ```
 
+Now we can add modules that our project is going to use. We will need the records module for our record types library (this is one of the most foundational modules of the framework that implements the concept of the records):
+
+```shell
+$ npm install --save x2node-records
+```
+
+We will need the DBOs (Database Operations) module to access our database:
+
+```shell
+$ npm install --save x2node-dbos
+```
+
+We will also need the database driver module:
+
+```shell
+$ npm install --save mysql
+```
+
+Now, we will need the web-services module for the basic RESTful API functionality:
+
+```shell
+$ npm install --save x2node-ws
+```
+
+And we will need an advanced RESTful API resources module that will make our lives much easier:
+
+```shell
+$ npm install --save x2node-ws-resources
+```
+
+And finally, we will want to keep our runtime environment information, such as the database connection information, in a `.env` file, so let's add the `dotenv` module:
+
+```shell
+$ npm install --save dotenv
+```
+
+And create the `.env` file in our project directory:
+
+```shell
+#
+# Port, on which our web-service will be listening.
+#
+HTTP_PORT=3001
+
+#
+# Database connection information.
+#
+DB_HOST=localhost
+DB_NAME=x2tutorial
+DB_USER=x2tutorial
+DB_PASSWORD=x2tutorial
+```
+
+At this point, our project structure should look like this:
+
+```
+x2tutorial/
++--misc/
+|  +--schema/
+|     +--create-schema-mysql.sql
++--node_modules/
+|  +--...
++--.env
++--package-lock.json
++--package.json
+```
+
+And we are ready to start the development.
+
 ### Record Type Definitions
 
 We started our project with the database schema definition. Now, let's define our record types for the application and map them to the tables and columns in the database.
@@ -313,62 +382,7 @@ If you don't feel like reading the full documentation for those modules right at
 
 ### The Web Service
 
-Now that we have our database and our record type definitions, we are ready to create the first iteration of our web-service.
-
-First, let's add modules that we are going to use to our project. We will need the records module for our record types library:
-
-```shell
-$ npm install --save x2node-records
-```
-
-We will need the DBOs module to access our database:
-
-```shell
-$ npm install --save x2node-dbos
-```
-
-We will also need the database driver module:
-
-```shell
-$ npm install --save mysql
-```
-
-Now, we will need the web-services module for the basic RESTful API functionality:
-
-```shell
-$ npm install --save x2node-ws
-```
-
-And we will need an advanced RESTful API resources module that will make our lives much easier:
-
-```shell
-$ npm install --save x2node-ws-resources
-```
-
-And finally, we will want to keep our runtime environment information, such as the database connection information, in a `.env` file, so let's add the `dotenv` module:
-
-```shell
-$ npm install --save dotenv
-```
-
-We can create a `.env` file now and place it in our project directory. Something like this:
-
-```shell
-#
-# Port, on which our web-service will be listening.
-#
-HTTP_PORT=3001
-
-#
-# Database connection information.
-#
-DB_HOST=localhost
-DB_NAME=x2tutorial
-DB_USER=x2tutorial
-DB_PASSWORD=x2tutorial
-```
-
-Now, let's create our top `server.js` file and place it in our project directory:
+Now that we have our database and our record type definitions, we are ready to create the first version of our web-service. Let's create our top `server.js` file and place it in the project directory:
 
 ```javascript
 'use strict';
@@ -443,6 +457,22 @@ ws.createApplication()
     .run(Number(process.env['HTTP_PORT']));
 ```
 
+As with the record type definitions, nothing replaces reading the manuals of the modules we used in the `server.js`. The two new modules are [x2node-ws](https://github.com/boylesoftware/x2node-ws) and [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources). But if you want to go ahead quick, here are some notes about the code in `server.js`:
+
+* Our record type definitions are processed by the `x2node-records` module, which builds the record types library object (called `recordTypes` in the code) from it. The record type definitions are extendable, so different modules can add their own specific definition attributes. In our definitions we use such attributes as `table` and `column` to map the record types to the database tables and columns. These attributes are consumed by the _Database Operations_ (DBOs) module. The `x2node-dbos` module itself acts as a record types library extension and must be added to the library builder before passing the definitions to it. That takes place in the `records.with(dbos)` line.
+
+* The central piece of the DBOs module is the _DBOs Factory_. A single factory object is maintained throughout the application lifecycle and is used to build and execute database operations. Creating the factory involves providing the DBOs module with the record types library and the database flavor (the factory will be building SQL queries, which are sometimes rather complex, so it needs to know the underlying RDBMS implementation peculiarities).
+
+* We use the 3rd party low-level `mysql` module to create the database connections pool. To standardize the connections handling for the framework (and the application, if it needs it), the DBOs module can wrap the pool and create a _data source_ from it with a standard interface. See `dboFactory.adaptDataSource(pool)` line in the web-service code.
+
+* The `x2node-ws` module's `createApplication()` method is used to build the web-service and subsequently run it. Its `addEndpoint()` method is used to define our RESTful API endpoints. The method takes two arguments: the regular expression for the endpoint URI and the endpoint handler implementation, which is normally as custom application component where all the API call handling logic takes place. The endpoint URI regular expression is applied to the whole URI (no `^` and `$` are needed) and can contain capturing groups. The capturing groups define so called _positional URI parameters_ that are made available to the handler. We use them in the individual resource endpoints to provide handlers with the record ID from the endpoint URI.
+
+* The high level `x2node-ws-resources` module implements the logic for handling resources (API endpoints that represent persistent records and allow the search, create, read, update and delete operations). The module provides an endpoint handler factory called `handlers` in our code. The factory builds two types of endpoint handlers: the collection resource, which allows search (HTTP method `GET`) and record creation (HTTP method `POST`) operations, and the individual resource, which allows reading a single record (HTTP `GET` method), updating it (HTTP `PATCH` method) and deleting it (HTTP `DELETE` method).
+
+* In the most basic form, all the handler factory needs is the handled record type name. All the magic happens in the default handler implementation. As are going to see later in this tutorial, the default handlers are usually extended with the custom application code.
+
+* The default handlers support sub-resources via the syntax that involves the `<-` constructs. It uses the record fields that point to the parent records to construct the records dependency chain.
+
 By now, we should have the following project directory structure:
 
 ```
@@ -462,6 +492,10 @@ x2tutorial/
 
 And we are ready to run our web-service!
 
+## Making Service Calls
+
+We can start our web-service by running NPM in the project directory:
+
 ```shell
 $ npm start
 ```
@@ -472,12 +506,110 @@ Or, to get some interesting stuff in the output:
 $ NODE_ENV=development NODE_DEBUG=X2_APP,X2_DBO npm start --silent
 ```
 
-You can test that it works with either `curl`:
+And we can see if the service works with either `curl`:
 
 ```shell
 $ curl -v http://localhost:3001/products | python -mjson.tool
 ```
 
-Or use our simple API tested in a browser at [http://x2node.com/api-tester/](http://x2node.com/api-tester/):
+Or use our simple API tester in a browser at [http://x2node.com/api-tester/](http://x2node.com/api-tester/):
 
 ![API Tester Screenshot](/api-tester-screen.png)
+
+So, let's make some API calls now. First, let's create a new _Product_ record. To do that, we are going to send a _new record template_ JSON in a `POST` call to the `/products` endpoint. Let's create the record template as `new-product.json`:
+
+```json
+{
+  "name": "Hat",
+  "description": "Leather hat with a wide brim.",
+  "price": 14.99,
+  "available": true
+}
+```
+
+Then send it to the running web-service:
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-product.json http://localhost:3001/products
+```
+
+You should get an HTTP 201 response with the new record in the response body. Note, that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
+
+Note, that the validation rules that we specified in the _Product_ record type definition should work. For example if we submit the following JSON as a new _Product_ record template:
+
+```json
+{
+  "price": "WHAAA?!"
+}
+```
+
+We will get an HTTP 400 response with the following body:
+
+```json
+{
+  "errorCode": "X2-RSRC-400-3",
+  "errorMessage": "Invalid record data.",
+  "validationErrors": {
+    "/name": [
+      "Missing value."
+    ],
+    "/price": [
+      "Invalid value type string, expected number."
+    ],
+    "/available": [
+      "Missing value."
+    ]
+  }
+}
+```
+
+In the `validationErrors` object, the invalid record fields are identified by [JSON pointers](https://tools.ietf.org/html/rfc6901) and have arrays of validation error messagees associated with them.
+
+So, assuming that our new product record has record ID 1, we can read the record:
+
+```shell
+$ curl -v http://localhost:3001/products/1 | python -mjson.tool
+```
+
+The response body is our record JSON.
+
+We can also search our products collection (consisting of just one product at the moment). To list all products:
+
+```shell
+$ curl -v http://localhost:3001/products | python -mjson.tool
+```
+
+Note, that the response is a "super-object" that includes the `records` array. This is because the endpoint is for the collection resource. Later on we are going to see how oather collection properties besides the `records` list can be included in the query response.
+
+To perform records collection search, the collection resource endpoint takes query parameters in the URL. For example:
+
+```shell
+$ curl -v "http://localhost:3001/products?f$available&f$name:pre=h&p=name,price&o=name&r=0,10" | python -mjson.tool
+```
+
+The query above requests all available products with names starting with "H" (case-insensitive), in the returned records it asks only to include the product name and the product price, it asks to order the `records` array in the response by the product name and it asks to include only first 10 mathcing records in it. To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` module's manual.
+
+Now we can try to update our product record. To do that, we are going to send a `PATCH` request to the _Product_ individual resource endpoint with a [JSON patch](https://tools.ietf.org/html/rfc6902) specification in the body. Let's change our product price and remove the optional product description. To do that, create the patch document in `patch-product.json`:
+
+```json
+[
+  { "op": "replace", "path": "/price", "value": 22.50 },
+  { "op": "remove", "path": "/description" }
+]
+```
+
+And send it to the web-service:
+
+```shell
+$ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-product.json http://localhost:3001/products/1
+```
+
+The updated record will be included in the response.
+
+Now, to delete record, you'd send:
+
+```shell
+$ curl -v -X DELETE http://localhost:3001/products/1
+```
+
+But don't do it just yet as we are going to need our product record for the further work.

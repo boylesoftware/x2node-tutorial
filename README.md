@@ -469,7 +469,7 @@ $ npm start
 Or, to get some interesting stuff in the output:
 
 ```shell
-$ NODE_ENV="development" NODE_DEBUG='X2_APP,X2_DBO' npm start --silent
+$ NODE_ENV=development NODE_DEBUG=X2_APP,X2_DBO npm start --silent
 ```
 
 You can test that it works with either `curl`:

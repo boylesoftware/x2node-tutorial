@@ -666,3 +666,58 @@ $ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.
 Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` manual, don't you?
 
 ## Tightening the Screws
+
+It's nice that we have a what appears to be fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let go over them one by one and fix them.
+
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
+
+```javascript
+// assemble and run the web-service
+ws.createApplication()
+
+    ...
+
+    // add API endpoints
+    .addEndpoint(
+        '/products',
+        handlers.collectionResource(
+            'Product', require('./lib/handlers/products.js')))
+    .addEndpoint(
+        '/products/([1-9][0-9]*)',
+        handlers.individualResource(
+            'Product', require('./lib/handlers/product.js')))
+    .addEndpoint(
+        '/accounts',
+        handlers.collectionResource(
+            'Account', require('./lib/handlers/accounts.js')))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)',
+        handlers.individualResource(
+            'Account', require('./lib/handlers/account.js')))
+    .addEndpoint(
+        '/orders',
+        handlers.collectionResource(
+            'Order', require('./lib/handlers/orders.js')))
+    .addEndpoint(
+        '/orders/([1-9][0-9]*)',
+        handlers.individualResource(
+            'Order', require('./lib/handlers/order.js')))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)/orders',
+        handlers.collectionResource(
+            'accountRef<-Order', require('./lib/handlers/orders.js')))
+    .addEndpoint(
+        '/accounts/([1-9][0-9]*)/orders/([1-9][0-9]*)',
+        handlers.individualResource(
+            'accountRef<-Order', require('./lib/handlers/order.js')))
+
+    ...
+```
+
+For now, you can create empty handler extensions and we will be filling them in as we progress in our tutorial. An empty extension, for example at `lib/handlers/products.js`, can be:
+
+```javascript
+'use strict';
+
+module.exports = {};
+```

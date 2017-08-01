@@ -1,0 +1,12 @@
+{
+  "name": "x2tutorial",
+  "private": true,
+  "dependencies": {
+    "dotenv": "^4.0.0",
+    "mysql": "^2.14.0",
+    "x2node-dbos": "^1.0.6",
+    "x2node-records": "^2.2.5",
+    "x2node-ws": "^1.1.2",
+    "x2node-ws-resources": "^1.2.1"
+  }
+}

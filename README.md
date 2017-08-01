@@ -20,7 +20,9 @@ This is a tutorial that shows how to develop a simple server-side application th
 
 _X2 Framework for Node.js_, or _x2node_ (we call it "times two node", but we won't get offended if you say "eks to node"), is a framework comprised of several related but standalone modules that may be helpful with solving a wide range of _Node.js_ server-side application development tasks. However, originally the framework's main purpose was and remains to provide everything you need to develop a web-service that exposes a RESTful API and is backed with a SQL database. This is the type of application, with which _x2node_ is the most helpful.
 
-In this tutorial we are going to develop a simplified web-service for an online store that provides a catalog of products and allows registred shoppers to place orders. We are going to be focusing only on the server-side but we will assume that there is a front-end web-application that provides the UI for the online store and is the main client of the web-service API. This tutorial is a good way to get an introduction of the most essential features and modules of the framework, but it does not replace documentation of the individual framework modules, which provides the most in-depth information including all the advanced features that may be left out here.
+In this tutorial we are going to develop a simplified web-service for an online store that provides a catalog of products and allows registred shoppers to place orders. We are going to be focusing only on the server-side but we will assume that there is a front-end web-application that provides the UI for the online store and is the main client of the web-service API.
+
+This tutorial is a good way to get an introduction of the most essential features and modules of the framework, but it does not replace documentation for the individual framework modules, which provides the most in-depth information including all the advanced features that may be left out here. Every framework module has a manual published as `README.md` file in the module's repository at [GitHub](https://github.com/). We also have an auto-generated complete [API reference](https://boylesoftware.github.io/x2node-api-reference/).
 
 ## Preparation
 
@@ -343,6 +345,7 @@ exports.recordTypes = {
             },
             'items': {
                 valueType: 'object[]',
+                optional: false,
                 table: 'order_items',
                 parentIdColumn: 'order_id',
                 properties: {
@@ -379,6 +382,8 @@ If you don't feel like reading the full documentation for those modules right at
 * Attribute `role: 'id'` marks the record ID property. It is also used to mark the ID property in nested object arrays.
 
 * Scalar properties (not arrays) are by default required in records. To mark an optional record property `optional: true` attribute is used.
+
+* Non-scalar properties, such `items` in the _Order_ record type, by default are optional. Our _Order_ record must have at least one line item for the order to make sense, so we implicitely marks the `items` property as `optional: false`.
 
 * Record type definition attribute `table` is used to map the record type to the database table. If unspecified, the table is assumed to have the same name as the record type.
 
@@ -669,7 +674,9 @@ Along with the `records` list, in the response we are going to see `referredReco
 
 It's nice that we have a what appears to be fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let go over them one by one and fix them.
 
-But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. The description of all the different hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the `x2node-ws-resources` module manual.
+
+We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
 
 ```javascript
 // assemble and run the web-service
@@ -721,3 +728,131 @@ For now, you can create empty handler extensions and we will be filling them in 
 
 module.exports = {};
 ```
+
+Now, let's have a look at our problems.
+
+### Record Field Uniqueness
+
+In our _Account_ record type the `email` property is used as the customer login name and therefore is declared unique. However, if we now try to create another record with `email` field "edward@revenge.com" by sending our `new-account.json` in a `POST` to `http://localhost:3001/accounts`, we are going to get a 500 error with message "Internal server error". That's bad. This is not an internal server error, this is an invalid request and it should come back with a 400 response and an explanation.
+
+So, that means in our `accounts.js` handler extension associated with the `/accounts` endpoint we need to add logic that checks if another _Account_ record already exists with the same `email` field before we attempt to save a new record. That can be done in a `beforeCreate` hook like this:
+
+```javascript
+'use strict';
+
+module.exports = {
+
+    beforeCreate(txCtx) {
+
+        // check no other account with same email exists
+        return txCtx.rejectIfExists('Account', [
+            [ 'email => eq', txCtx.recordTmpl.email ]
+        ], 400, 'Another account with that E-mail exists.');
+    }
+};
+```
+
+Restart the web-service and try to `POST` the `new-account.json` template to the `/accounts` endpoint again. This time you should get a nice HTTP 400 response.
+
+The `txCtx` argument passed into the hook is the _transaction context_, which is an object made available to all hooks and is used as the framework's API exposed to the hook. Among other things, the transaction context exposes a number of convenience functions, such as the `rejectIfExists()` function used in our example above. The complete reference for the transaction context object can be found in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html).
+
+### New Record Normalization
+
+Another problem related to field uniqueness is that our database does not allow having orders with multiple line items for the same product because our `order_items` database table has a `UNIQUE (order_id, product_id)` contstraint. If we try to `POST` something like the following:
+
+```json
+{
+  "accountRef": "Account#1",
+  "placedOn": "2017-08-01",
+  "status": "NEW",
+  "items": [
+    {
+      "productRef": "Product#1",
+      "quantity": 1
+    },
+    {
+      "productRef": "Product#1",
+      "quantity": 3
+    }
+  ]
+}
+```
+
+to the `/orders` endpoint, we are again going to get a 500 error.
+
+This time, we want to preprocess new order records and automatically consolidate line items referring to the same product before saving the order. So, in our `orders.js` handler we can add the following hook:
+
+```javascript
+'use strict';
+
+module.exports = {
+
+    prepareCreate(txCtx) {
+
+        // consolidate line items by product
+        const itemsByProduct = {};
+        for (let item of txCtx.recordTmpl.items) {
+            if (itemsByProduct[item.productRef]) {
+                itemsByProduct[item.productRef].quantity += item.quantity;
+            } else {
+                itemsByProduct[item.productRef] = item;
+            }
+        }
+        txCtx.recordTmpl.items = Object.values(itemsByProduct);
+    }
+};
+```
+
+The `prepareCreate` hook is called before the database transaction is started and allows modification of the submitted record template. Note also that it is called _after_ the record template is validated, so we know that the `items` array is not empty (since it is declared as `optional: false` in the record type definition).
+
+Now if we submit JSON with tried before, the order will be created with a single line item for product #1 and quantity 4.
+
+### Referred Records Existence
+
+Another problem with submitting new orders that we have is referring to a non-existant product. For example, if we try to `POST` the following:
+
+```json
+{
+  "accountRef": "Account#1",
+  "placedOn": "2017-08-01",
+  "status": "NEW",
+  "items": [
+    {
+      "productRef": "Product#666",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+At the moment, this will lead to another 500 error. The same will happen with the `accountRef` points to a non-existant account (note that it can't happen if we use `/accounts/{accountId}/orders` endpoint&mdash;try it and see how it works). And also, if we try to create a new order with a product that exists but is not available, the system will silently allow it. All that means that we have to do some checks in the `beforeCreate` hook of the `orders.js` handler:
+
+```javascript
+module.exports = {
+
+    ...
+
+    beforeCreate(txCtx) {
+
+        const recordTmpl = txCtx.recordTmpl;
+
+        // check if all products exist and are available
+        return txCtx.rejectIfNotExactNum('Product', [
+            [ 'id => oneof', recordTmpl.items.map(
+                item => txCtx.refToId('Product', item.productRef)) ],
+            [ 'available => is', true ]
+        ], recordTmpl.items.length,
+        400, 'Some products do not exist or are unavailable.')
+
+        // check that account exists
+        .then(
+            () => txCtx.rejectIfNotExists('Account', [
+                [ 'id => is', txCtx.refToId('Account', recordTmpl.accountRef) ]
+            ]),
+            err => Promise.reject(err)
+        );
+    }
+};
+```
+
+This is similar to what we've already done in the `accounts.js` handler, but more different checks are performed. Also note how we use `txCtx.refToId()` utility function to convert references to record IDs needed by the record filter conditions.

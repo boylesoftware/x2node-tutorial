@@ -2,6 +2,20 @@
 
 This is a tutorial that shows how to develop a simple server-side application that provides a RESTful API to access data stored in a SQL database using _X2 Framework for Node.js_ (or simply _x2node_).
 
+## Table of Contents
+
+* [Introduction](#introduction)
+* [Preparation](#preparation)
+  * [Record Types](#record-types)
+  * [Actors](#actors)
+  * [API Endpoints](#api-endpoints)
+* [The Database](#the-database)
+* [Project Setup](#project-setup)
+  * [Record Type Definitions](#record-type-definitions)
+  * [The Web Service](#the-web-service)
+* [Making Service Calls](#making-service-calls)
+* [Tightening the Screws](#tightening-the-screws)
+
 ## Introduction
 
 _X2 Framework for Node.js_, or _x2node_ (we call it "times two node", but we won't get offended if you say "eks to node"), is a framework comprised of several related but standalone modules that may be helpful with solving a wide range of _Node.js_ server-side application development tasks. However, originally the framework's main purpose was and remains to provide everything you need to develop a web-service that exposes a RESTful API and is backed with a SQL database. This is the type of application, with which _x2node_ is the most helpful.
@@ -516,7 +530,9 @@ Or use our simple API tester in a browser at [http://x2node.com/api-tester/](htt
 
 ![API Tester Screenshot](/api-tester-screen.png)
 
-So, let's make some API calls now. First, let's create a new _Product_ record. To do that, we are going to send a _new record template_ JSON in a `POST` call to the `/products` endpoint. Let's create the record template as `new-product.json`:
+So, let's make some API calls now. In the call examples below we are going to use `curl`, but it may be more convenient with the API tester&mdash;whichever is your preference.
+
+First, let's create a new _Product_ record. To do that, we are going to send a _new record template_ JSON in a `POST` call to the `/products` endpoint. Let's create the record template as `new-product.json`:
 
 ```json
 {
@@ -612,4 +628,41 @@ Now, to delete record, you'd send:
 $ curl -v -X DELETE http://localhost:3001/products/1
 ```
 
-But don't do it just yet as we are going to need our product record for the further work.
+But don't do it just yet as we are going to need our product record for the further work. Instead, let's go ahead and create an _Account_ record:
+
+```json
+{
+  "email": "edward@revenge.com",
+  "firstName": "Edward",
+  "lastName": "Teach",
+  "passwordDigest": "e87eacd237e856273d00b5cab9141bdffdb5c5a7"
+}
+```
+
+The `passwordDigest` contains hex encoded SHA1 digest of word "blackbeard".
+
+And an _Order_ record (assuming our new customer account has ID 1 and the product also has ID 1):
+
+```json
+{
+  "accountRef": "Account#1",
+  "placedOn": "2017-08-01",
+  "status": "NEW",
+  "items": [
+    {
+      "productRef": "Product#1",
+      "quantity": 1
+    }
+  ]
+}
+```
+
+Note how we use references to records of other types. When we search records, we can resolve the references and include the referred records in the response. For example, we may have a screen in the front-end that shows orders. In the same screen, we want to show the ordered products by the product names, not the crypting references. So we can make the call:
+
+```json
+$ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.tool
+```
+
+Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` manual, don't you?
+
+## Tightening the Screws

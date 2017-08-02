@@ -32,10 +32,6 @@ const ds = dboFactory.adaptDataSource(pool);
 // create resource endpoint handlers factory and pass our DBO factory to it
 const handlers = resources.createResourceHandlersFactory(ds, dboFactory);
 
-process.on('unhandledRejection', error => {
-  console.log('### unhandledRejection', error);
-});
-
 // assemble and run the web-service
 ws.createApplication()
 

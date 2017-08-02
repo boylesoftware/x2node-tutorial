@@ -74,7 +74,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneOf', 'NEW', 'ACCEPTED', 'SHIPPED'] ]
+                validators: [ ['oneOf', 'NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
@@ -94,7 +94,8 @@ exports.recordTypes = {
                     },
                     'productRef': {
                         valueType: 'ref(Product)',
-                        column: 'product_id'
+                        column: 'product_id',
+                        modifiable: false
                     },
                     'quantity': {
                         valueType: 'number',

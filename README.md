@@ -122,7 +122,7 @@ CREATE TABLE orders (
     id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id INTEGER UNSIGNED NOT NULL,
     placed_on CHAR(10) NOT NULL, -- in YYYY-MM-DD format
-    status ENUM('NEW', 'ACCEPTED', 'SHIPPED') NOT NULL,
+    status ENUM('NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
     payment_txid VARCHAR(100), -- payments backend transaction id when ACCEPTED
     FOREIGN KEY (account_id) REFERENCES accounts (id)
 );
@@ -335,7 +335,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneof', 'NEW', 'ACCEPTED', 'SHIPPED'] ]
+                validators: [ ['oneof', 'NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
@@ -355,7 +355,8 @@ exports.recordTypes = {
                     },
                     'productRef': {
                         valueType: 'ref(Product)',
-                        column: 'product_id'
+                        column: 'product_id',
+                        modifiable: false
                     },
                     'quantity': {
                         valueType: 'number',
@@ -731,9 +732,9 @@ module.exports = {};
 
 Now, let's have a look at our problems.
 
-### Record Field Uniqueness
+### New Record Field Uniqueness
 
-In our _Account_ record type the `email` property is used as the customer login name and therefore is declared unique. However, if we now try to create another record with `email` field "edward@revenge.com" by sending our `new-account.json` in a `POST` to `http://localhost:3001/accounts`, we are going to get a 500 error with message "Internal server error". That's bad. This is not an internal server error, this is an invalid request and it should come back with a 400 response and an explanation.
+In our _Account_ record type the `email` property is used as the customer login name and therefore is declared unique. However, if we now try to create another record with `email` field "edward@revenge.com" by sending our `new-account.json` in a `POST` to `http://localhost:3001/accounts`, we are going to get an [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error with message "Internal server error". That's bad. This is not an internal server error, this is an invalid request and it should come back with an [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response and an explanation.
 
 So, that means in our `accounts.js` handler extension associated with the `/accounts` endpoint we need to add logic that checks if another _Account_ record already exists with the same `email` field before we attempt to save a new record. That can be done in a `beforeCreate` hook like this:
 
@@ -742,21 +743,91 @@ So, that means in our `accounts.js` handler extension associated with the `/acco
 
 module.exports = {
 
-    beforeCreate(txCtx) {
+    beforeCreate(txCtx, recordTmpl) {
 
         // check no other account with same email exists
-        return txCtx.rejectIfExists('Account', [
-            [ 'email => eq', txCtx.recordTmpl.email ]
-        ], 400, 'Another account with that E-mail exists.');
+        return txCtx.rejectIfExists(
+            'Account', [
+                [ 'email => eq', recordTmpl.email ]
+            ],
+            400, 'Another account with that E-mail exists.'
+        );
     }
 };
 ```
 
-Restart the web-service and try to `POST` the `new-account.json` template to the `/accounts` endpoint again. This time you should get a nice HTTP 400 response.
+Restart the web-service and try to `POST` the `new-account.json` template to the `/accounts` endpoint again. This time you should get a nice [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response.
 
-The `txCtx` argument passed into the hook is the _transaction context_, which is an object made available to all hooks and is used as the framework's API exposed to the hook. Among other things, the transaction context exposes a number of convenience functions, such as the `rejectIfExists()` function used in our example above. The complete reference for the transaction context object can be found in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html).
+The `txCtx` argument passed into the hook is the _transaction context_, which is an object made available to all hooks and presents the framework's API to the hook implementation. Among other things, the transaction context exposes a number of convenience functions, such as the `rejectIfExists()` function used in our example above. The function takes the following four arguments:
 
-### New Record Normalization
+* Name of the record type to query in the database.
+* Record filter specification (read on to see more about it).
+* HTTP status code for the error response if the condition is triggered.
+* Error message to include in the error response if the condition is triggered.
+
+If the condition is triggered (in our case&mdash;matching _Account_ records exist), the function returns a `Promise` rejected with an error web-service response. Otherwise, it returns nothing. In general for the hooks, if a hook returns nothing, the API call processing logic continues. If it returns a rejected `Promise`, the call processing logic is aborted, the database transaction is rolled back and the rejection reason is returned to the API client.
+
+The complete reference for the transaction context object and helper functions that it exposes can be found in the [Transaction Context](https://github.com/boylesoftware/x2node-ws-resources#transaction-context) section of the module manual as well as in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html). Various transactional check helper functions exposed by the transaction context, such as the `rejectIfExists()` used above, take record filter specification as a parameter. This filter specification is passed on to the framework's DBOs module. This is the point where you may want to have a look at the [Filter Specification](https://github.com/boylesoftware/x2node-dbos#filter-specification) section of the module's manual.
+
+### Updated Record Field Uniqueness
+
+So, the code above solves the problem of catching attempts to create a new account with already taken E-mail. What about the situation when we try to update an existing account and change its E-mail? That check can be performed in the `account.js` individual resource handler:
+
+```javascript
+'use strict';
+
+// used to save the original email value on the transaction context
+const ORIGINAL_EMAIL = Symbol();
+
+module.exports = {
+
+    beforeUpdate(txCtx, record) {
+
+        // remember original email on the transaction context
+        txCtx[ORIGINAL_EMAIL] = record.email;
+    },
+
+    beforeUpdateSave(txCtx, record) {
+
+        // if email changed, make sure no duplicate exists
+        if (record.email !== txCtx[ORIGINAL_EMAIL])
+            return txCtx.rejectIfExists(
+                'Account', [
+                    [ 'email => eq', record.email ],
+                    [ 'id => not', record.id ]
+                ],
+                422, 'Another account with that E-mail exists.'
+            );
+    }
+};
+```
+
+Now if we `POST` another account to `/accounts`:
+
+```json
+{
+  "email": "long@walrus.com",
+  "firstName": "John",
+  "lastName": "Silver",
+  "passwordDigest": "0000000000000000000000000000000000000000"
+}
+```
+
+and then try to send the following `PATCH` to `/accounts/1` endpoint:
+
+```json
+[
+  { "op": "replace", "path": "/email", "value": "long@walrus.com" }
+]
+```
+
+we are going to get an [HTTP 422](https://tools.ietf.org/html/rfc4918#section-11.2) response.
+
+The code in the `account.js` handler shows how we can save arbitrary data on the transaction context and use it for communication between different hooks that way. In our example in the `beforeUpdate` hook, called before the patch is applied and provided with the unmodified record, we save the original `email` value on the context. Then, in the `beforeUpdateSave` hook, called after the patch is applied but before the updated record is saved back to the database, if we see that the `email` was updated, we perform our duplicate check similarly to how we did it in the `beforeCreate` hook.
+
+Note, that we recommend using `Symbol` to save data on the transaction context to aviod any clashes between handlers.
+
+### Record Normalization
 
 Another problem related to field uniqueness is that our database does not allow having orders with multiple line items for the same product because our `order_items` database table has a `UNIQUE (order_id, product_id)` contstraint. If we try to `POST` something like the following:
 
@@ -778,7 +849,7 @@ Another problem related to field uniqueness is that our database does not allow 
 }
 ```
 
-to the `/orders` endpoint, we are again going to get a 500 error.
+to the `/orders` endpoint, we are again going to get an [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error.
 
 This time, we want to preprocess new order records and automatically consolidate line items referring to the same product before saving the order. So, in our `orders.js` handler we can add the following hook:
 
@@ -787,18 +858,18 @@ This time, we want to preprocess new order records and automatically consolidate
 
 module.exports = {
 
-    prepareCreate(txCtx) {
+    prepareCreate(_, recordTmpl) {
 
         // consolidate line items by product
         const itemsByProduct = {};
-        for (let item of txCtx.recordTmpl.items) {
+        for (let item of recordTmpl.items) {
             if (itemsByProduct[item.productRef]) {
                 itemsByProduct[item.productRef].quantity += item.quantity;
             } else {
                 itemsByProduct[item.productRef] = item;
             }
         }
-        txCtx.recordTmpl.items = Object.values(itemsByProduct);
+        recordTmpl.items = Object.values(itemsByProduct);
     }
 };
 ```
@@ -806,6 +877,36 @@ module.exports = {
 The `prepareCreate` hook is called before the database transaction is started and allows modification of the submitted record template. Note also that it is called _after_ the record template is validated, so we know that the `items` array is not empty (since it is declared as `optional: false` in the record type definition).
 
 Now if we submit JSON with tried before, the order will be created with a single line item for product #1 and quantity 4.
+
+But how do we handle the same situation when an existing order record is updated? We have already seen the `beforeUpdateSave` hook in our `account.js` handler and we could place our line items consolidation logic it in the `order.js` handler. One problem though, if we try to do it we still get the [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error caused by our `UNIQUE` database constraint violation.
+
+The problem is that the `beforeUpdateSave` hook cannot modify the record passed to it. Or rather it can modifiy it, but it will not affect the database updated logic. This is because how the patch is processed by the framework&mdash;as the patch instructions are processed, both the record get updated and a series of SQL statements used to update the database is generated simultaneously. So, changing the record after the patch has been applied won't change the generated SQL statements. But we still can make a check in our `beforeUpdateSave` hook in the `order.js` handler to prevent the internal server error and convert it to the submitted patch problem:
+
+```javascript
+'use strict';
+
+const ws = require('x2node-ws');
+
+module.exports = {
+
+    beforeUpdateSave(_, record) {
+
+        // verify that there are no product duplicates
+        const productRefs = new Set();
+        for (let item of record.items) {
+            if (productRefs.has(item.productRef))
+                return Promise.reject(ws.createResponse(422).setEntity({
+                    errorMessage: 'Multiple line items for the same product.'
+                }));
+            productRefs.add(item.productRef);
+        }
+    }
+};
+```
+
+This code uses the framework's low-level web-service module `x2node-ws` to create an error response and return it as a rejection. By returning a rejected promise, the hook aborts the rest of the call processing logic, rolls back the database transaction and sends the rejection reason as the response to the API client.
+
+Since this check does not actually require any database interaction, we could have implemented it as a custom validator instead. We will see how it can be done later in this tutorial.
 
 ### Referred Records Existence
 
@@ -825,34 +926,146 @@ Another problem with submitting new orders that we have is referring to a non-ex
 }
 ```
 
-At the moment, this will lead to another 500 error. The same will happen with the `accountRef` points to a non-existant account (note that it can't happen if we use `/accounts/{accountId}/orders` endpoint&mdash;try it and see how it works). And also, if we try to create a new order with a product that exists but is not available, the system will silently allow it. All that means that we have to do some checks in the `beforeCreate` hook of the `orders.js` handler:
+At the moment, this will lead to another [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error. The same will happen with the `accountRef` points to a non-existant account (note that it can't happen if we use `/accounts/{accountId}/orders` endpoint&mdash;try it and see how it works). And also, if we try to create a new order with a product that exists but is not available, the system will silently allow it. All that means that we have to do some checks in the `beforeCreate` hook of the `orders.js` handler:
 
 ```javascript
 module.exports = {
 
     ...
 
-    beforeCreate(txCtx) {
-
-        const recordTmpl = txCtx.recordTmpl;
+    beforeCreate(txCtx, recordTmpl) {
 
         // check if all products exist and are available
-        return txCtx.rejectIfNotExactNum('Product', [
-            [ 'id => oneof', recordTmpl.items.map(
-                item => txCtx.refToId('Product', item.productRef)) ],
-            [ 'available => is', true ]
-        ], recordTmpl.items.length,
-        400, 'Some products do not exist or are unavailable.')
+        return txCtx.rejectIfNotExactNum(
+            'Product', [
+                [ 'id => oneof', recordTmpl.items.map(
+                    item => txCtx.refToId('Product', item.productRef)) ],
+                [ 'available => is', true ]
+            ], recordTmpl.items.length,
+            400, 'Some products do not exist or are unavailable.'
 
-        // check that account exists
-        .then(
-            () => txCtx.rejectIfNotExists('Account', [
+        // then check that account exists
+        ).then(() => txCtx.rejectIfNotExists(
+            'Account', [
                 [ 'id => is', txCtx.refToId('Account', recordTmpl.accountRef) ]
-            ]),
-            err => Promise.reject(err)
-        );
+            ],
+            400, 'Account does not exist.'
+        ));
     }
 };
 ```
 
 This is similar to what we've already done in the `accounts.js` handler, but more different checks are performed. Also note how we use `txCtx.refToId()` utility function to convert references to record IDs needed by the record filter conditions.
+
+The `accountRef` field of the _Order_ record is declared as `modifiable: false`, so it can't be updated and we don't need to check the account existence in the `beforeUpdateSave` hook. However, a new line item can be added to an order and we still must make sure that referred product exists and is available. So, let's add the code to our `beforeUpdateSave` hook in the `order.js` handler:
+
+```javascript
+...
+
+// used to save original order product references on the transaction context
+const ORIGINAL_PRODUCTS = Symbol();
+
+module.exports = {
+
+    beforeUpdate(txCtx, record) {
+
+        // save original product references
+        txCtx[ORIGINAL_PRODUCTS] = new Set(record.items.map(item => item.productRef));
+    },
+
+    beforeUpdateSave(txCtx, record) {
+
+        // verify that there are no product duplicates
+        ...
+
+        // make sure all added products exist
+        const existingProductRefs = txCtx[ORIGINAL_PRODUCTS];
+        const addedProductRefs = record.items
+            .map(item => item.productRef)
+            .filter(productRef => !existingProductRefs.has(productRef));
+        if (addedProductRefs.length > 0)
+            return txCtx.rejectIfNotExactNum(
+                'Product', [
+                    [ 'id => oneof', addedProductRefs.map(
+                        productRef => txCtx.refToId('Product', productRef)) ],
+                    [ 'available => is', true ]
+                ], addedProductRefs.length,
+                422, 'Some added products do not exist or are unavailable.'
+            );
+    }
+};
+```
+
+### Preventing Referred Records Deletion
+
+Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. Let's add the appropriate hooks to our `account.js` handler:
+
+```javascript
+...
+
+module.exports = {
+
+    ...
+
+    beforeDelete(txCtx) {
+
+        // get account id from the call URI
+        const accountId = Number(txCtx.call.uriParams[0]);
+
+        // check if orders exist for the account
+        return txCtx.rejectIfExists(
+            'Order', [
+                [ 'accountRef => is', accountId ]
+            ],
+            400, 'Orders exist for the account.'
+        );
+    }
+};
+```
+
+And our `product.js` handler:
+
+```javascript
+'use strict';
+
+module.exports = {
+
+    beforeDelete(txCtx) {
+
+        // get product id from the call URI
+        const productId = Number(txCtx.call.uriParams[0]);
+
+        // check if orders exist for the product
+        return txCtx.rejectIfExists(
+            'Order', [
+                [ 'items => !empty', [
+                    [ 'productRef => is', productId ]
+                ]]
+            ],
+            400, 'Orders exist for the product.'
+        );
+    }
+};
+```
+
+Note how we extract the addressed record (_Account_ or _Product_) ID from the call URI. When we used `ws.addEntpoint()` function in `server.js` to define the `/accounts/{accountId}` and `/products/{productId}` endpoints, we used capturing groups in the URI regular expressions. Those groups translate to the `uriParams` array on the API call object available to the handlers via the `call` property of the transaction context. The API call object is what the low-level `x2node-ws` module operates with and it exposes many useful things to the handlers. See its full description in the [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) section of the manual as well as its full [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-ServiceCall.html).
+
+And you also can see that in this case we don't need to call `txCtx.refToId()` function to convert the reference to the ID as we are getting the ID straight from the URI.
+
+### Backend Operations
+
+Our _Order_ record type defines a `status` field, which influences what operations can be performed on the records.
+
+TODO
+
+### Conditional Requests
+
+TODO
+
+### Authentication and Authorization
+
+TODO
+
+### User Login
+
+TODO

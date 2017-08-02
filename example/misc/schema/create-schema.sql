@@ -18,7 +18,7 @@ CREATE TABLE orders (
     id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id INTEGER UNSIGNED NOT NULL,
     placed_on CHAR(10) NOT NULL,
-    status ENUM('NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
+    status ENUM('ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
     payment_txid VARCHAR(100),
     FOREIGN KEY (account_id) REFERENCES accounts (id)
 );

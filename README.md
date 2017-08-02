@@ -122,8 +122,8 @@ CREATE TABLE orders (
     id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id INTEGER UNSIGNED NOT NULL,
     placed_on CHAR(10) NOT NULL, -- in YYYY-MM-DD format
-    status ENUM('NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
-    payment_txid VARCHAR(100), -- payments backend transaction id when ACCEPTED
+    status ENUM('ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
+    payment_txid VARCHAR(100), -- payments backend transaction id
     FOREIGN KEY (account_id) REFERENCES accounts (id)
 );
 
@@ -335,7 +335,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneof', 'NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
+                validators: [ ['oneof', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
@@ -390,7 +390,7 @@ If you don't feel like reading the full documentation for those modules right at
 
 * Property definition `column` attribute is used to map the property to the corresponding database column. By default, the column is assumed to have the same name as the property, so we use the `column` attribute only where it is not so.
 
-* Property definition attribute `validators` provides an array of constraints for the property values. In this example we only use built-in validators provided by the framework. See https://github.com/boylesoftware/x2node-validators#standard-validators for the standard validators list. Some validators are applied by the framework automatically. For example, if a property value type is declared to be a `number` and the client submits a record with a string via the API, the framework will reject such record.
+* Property definition attribute `validators` provides an array of constraints for the property values. In this example we only use built-in validators provided by the framework. See [Standard Validators](https://github.com/boylesoftware/x2node-validators#standard-validators) section of the `x2node-validators` module's manual for the complete standard validators list. Some validators are applied by the framework automatically. For example, if a property value type is declared to be a `number` and the client submits a record with a string via the API, the framework will reject such record.
 
 * Some validators are so called _normalizers_. They may modify the property value in some situations. See `lowercase` normalizer in the validators list of the `email` property on the _Account_ record type. When, for example, a new account record submitted via a `POST` to our application's _/accounts_ endpoint includes `email` property that contains uppercase letters, the framework will transform it to all lowercase before saving the account record to the database.
 
@@ -555,7 +555,7 @@ Then send it to the running web-service:
 $ curl -v -H "Content-Type: application/json" --data-binary @new-product.json http://localhost:3001/products
 ```
 
-You should get an HTTP 201 response with the new record in the response body. Note, that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
+You should get an [HTTP 201](https://tools.ietf.org/html/rfc7231#section-6.3.2) response with the new record in the response body. Note, that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
 
 Note, that the validation rules that we specified in the _Product_ record type definition should work. For example if we submit the following JSON as a new _Product_ record template:
 
@@ -565,7 +565,7 @@ Note, that the validation rules that we specified in the _Product_ record type d
 }
 ```
 
-We will get an HTTP 400 response with the following body:
+We will get an [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response with the following body:
 
 ```json
 {
@@ -669,7 +669,7 @@ Note how we use references to records of other types. When we search records, we
 $ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.tool
 ```
 
-Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` manual, don't you?
+Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you've read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` manual, haven't you?
 
 ## Tightening the Screws
 

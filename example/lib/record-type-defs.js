@@ -74,7 +74,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneOf', 'NEW', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
+                validators: [ ['oneOf', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',

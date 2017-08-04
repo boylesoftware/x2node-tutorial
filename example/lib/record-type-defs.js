@@ -111,6 +111,7 @@ exports.recordTypes = {
                 optional: false,
                 table: 'order_items',
                 parentIdColumn: 'order_id',
+                modifiable: false,
                 properties: {
                     'id': {
                         valueType: 'number',
@@ -118,8 +119,7 @@ exports.recordTypes = {
                     },
                     'productRef': {
                         valueType: 'ref(Product)',
-                        column: 'product_id',
-                        modifiable: false
+                        column: 'product_id'
                     },
                     'quantity': {
                         valueType: 'number',

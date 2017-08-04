@@ -27,13 +27,6 @@ exports.authorizePayment = function(ccNumber, ccExpDate, amount) {
     });
 };
 
-exports.updateAmount = function(txId, amount) {
-
-    return new Promise(resolve => {
-        setTimeout(() => { log(`payment ${txId} amount updated to $${amount}`); resolve(); }, 200);
-    });
-};
-
 exports.capturePayment = function(txId) {
 
     return new Promise(resolve => {

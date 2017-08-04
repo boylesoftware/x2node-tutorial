@@ -36,7 +36,7 @@ Our application is going to be working with the following major record types:
 
 * _Product_ - This is a descriptor of a product available in our online store. Every product will have a name, a description, a price and an availability flag.
 * _Account_ - This is an account of a registered customer. It will include the person's name, E-mail address, information used to authenticate (login) the customer.
-* _Order_ - This is an order placed by a customer for a number of products. The record will include information about when the order was placed, what customer placed the order, the order status ("new", "accepted", "shipped"), order charge transaction ID and the order line items, each of which will include the ordered product and the ordered quantity.
+* _Order_ - This is an order placed by a customer for a number of products. The record will include information about when the order was placed, what customer placed the order, the order status ("new", "shipped" or "canceled"), order payment transaction ID in a 3rd-party payments processing backend and the order line items, each of which will include the ordered product and the ordered quantity. Once submitted, the order details may not be changed with the exception of its status.
 
 ### Actors
 
@@ -68,12 +68,11 @@ First, let's define the most essential API for our actors. This API will provide
 | _/accounts/{accountId}_ | `PATCH`  | _Admin_, _Customer_ | Update customer account information. Admins can update any account, customers can update only their own accounts.
 | _/accounts/{accountId}_ | `DELETE` | _Admin_, _Customer_ | Permanently delete customer account. Admins can delete any account, customers can delete only their own accounts. Accounts are allowed to be deleted only if they don't have any orders.
 | _/orders_               | `GET`    | _Admin_             | List/search orders.
-| _/orders_               | `POST`   | _Admin_             | Create an order.
+| _/orders_               | `POST`   | _Admin_             | Create an order. Creating an order also triggers a payment authorization in the payments processing backend. The order data submitted with the `POST`, in addition to the regular _Order_ record fields, includes information for the payment (credit card number, etc.), which are not stored in the database but are used to authorize the payment. Once an order is created and the payment is authorized, the order record cannot be deleted.
 | _/orders/{orderId}_     | `GET`    | _Admin_             | Get order information.
-| _/orders/{orderId}_     | `PATCH`  | _Admin_             | Updated order.
-| _/orders/{orderId}_     | `DELETE` | _Admin_             | Delete order.
+| _/orders/{orderId}_     | `PATCH`  | _Admin_             | Update order. The only property of the order that can be updated is its status. Changing the status triggers corresponding operations in the payments processing backend: the payment transaction can be captured if the order has been shipped or voided if the order was canceled.
 
-As you can see, there is the same set of endpoints for each record type in our system: we have an enpoint that addresses all records of the given type and allows `GET` and `POST` HTTP methods, and we have an endpoint that addresses a specific record of the given type identified by the record ID included in the URI and allows `GET`, `PATCH` and `DELETE` methods. The first endpoint type is called _record collection endpoint_ and the second type is called _individual record endpoint_. That way, our web-service API represents the records of different record types as _resources_ in the true RESTful API spirit.
+As you can see, there is the same set of endpoints for each record type in our system: we have an enpoint that addresses all records of the given type and allows `GET` and `POST` HTTP methods, and we have an endpoint that addresses a specific record of the given type identified by the record ID included in the URI and allows `GET`, `PATCH` and `DELETE` methods (`DELETE` method is not allowed for the _Order_ records as an exception). The first endpoint type is called _record collection endpoint_ and the second type is called _individual record endpoint_. That way, our web-service API represents the records of different record types as _resources_ in the true RESTful API spirit.
 
 You may notice that the _Order_ resource API is open only to the store admins. But how do customers manage their own orders? We could allow role _Customer_ access the _Order_ resource endpoints, but then we would have to implement some tricky logic in the back-end that would limit their access only to their own orders (we don't want them to see or do anything to other customers' orders). Instead, we can introduce endpoints for sub-resources under the _/accounts/{accountId}_ URI like this:
 
@@ -83,7 +82,6 @@ You may notice that the _Order_ resource API is open only to the store admins. B
 | _/accounts/{accountId}/orders_           | `POST`   | Create new order for the customer.
 | _/accounts/{accountId}/orders/{orderId}_ | `GET`    | Get one of the customer's orders.
 | _/accounts/{accountId}/orders/{orderId}_ | `PATCH`  | Update one of the customer's orders.
-| _/accounts/{accountId}/orders/{orderId}_ | `DELETE` | Delete one of the customer's orders (only of the order status is "new").
 
 The _/orders_ endpoints will be used by the store administrative application and present the _Order_ as a system-wide resource. The _/accounts/{accountId}/orders_ endpoints will be used by the end-user application and present the _Order_ as a sub-resource of the _Account_ resource.
 
@@ -123,12 +121,12 @@ CREATE TABLE orders (
     account_id INTEGER UNSIGNED NOT NULL,
     placed_on CHAR(10) NOT NULL, -- in YYYY-MM-DD format
     status ENUM('NEW', 'SHIPPED', 'CANCELED') NOT NULL,
-    payment_txid VARCHAR(100), -- payments backend transaction id
+    payment_txid VARCHAR(100) NOT NULL, -- payments backend transaction id
     FOREIGN KEY (account_id) REFERENCES accounts (id)
 );
 
 CREATE TABLE order_items (
-    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY, -- we'll need it later
+    id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY, -- explained below
     order_id INTEGER UNSIGNED NOT NULL,
     product_id INTEGER UNSIGNED NOT NULL,
     qty TINYINT UNSIGNED NOT NULL,
@@ -138,7 +136,7 @@ CREATE TABLE order_items (
 );
 ```
 
-You may notice that we added a synthetic primary key to the order items table, which is technically not needed for a fully normalized schema. We will need it later, however, as the framework will be relying on it to correctly process changes to the order items.
+You may notice that we added a synthetic primary key to the order items table, which is technically not needed for a fully normalized schema. The framework, however, requires it&mdash;it needs it to be able to detect changes in complex list elements such as the order items.
 
 At the moment, the framework does not have a module that generates database schema for you automatically. We may develop such module in some future, but in any case, we recommend maintaining the database schema as a separate piece of your project. Yes, it introduces a task of maintaining your data sotrage definition in sync in two separate places&mdash;the database and your application&mdash;but it also gives you full control over the data storage intricacies (think indexes, tablespaces, collations, etc.). Your DBAs will thank you!
 
@@ -340,14 +338,15 @@ exports.recordTypes = {
             'paymentTransactionId': {
                 valueType: 'string',
                 column: 'payment_txid',
-                optional: true,
-                validators: [ ['maxLength', 100] ]
+                validators: [ ['maxLength', 100] ],
+                modifiable: false
             },
             'items': {
                 valueType: 'object[]',
                 optional: false,
                 table: 'order_items',
                 parentIdColumn: 'order_id',
+                modifiable: false,
                 properties: {
                     'id': {
                         valueType: 'number',
@@ -355,8 +354,7 @@ exports.recordTypes = {
                     },
                     'productRef': {
                         valueType: 'ref(Product)',
-                        column: 'product_id',
-                        modifiable: false
+                        column: 'product_id'
                     },
                     'quantity': {
                         valueType: 'number',
@@ -394,7 +392,7 @@ If you don't feel like reading the full documentation for those modules right at
 
 * Some validators are so called _normalizers_. They may modify the property value in some situations. See `lowercase` normalizer in the validators list of the `email` property on the _Account_ record type. When, for example, a new account record submitted via a `POST` to our application's _/accounts_ endpoint includes `email` property that contains uppercase letters, the framework will transform it to all lowercase before saving the account record to the database.
 
-* If a property is marked with a `modifiable: false` attribute, after a new record is created, the property value may not be changed via an update.
+* If a property is marked with a `modifiable: false` attribute, after a new record is created, the property value may not be changed via an update. If a nested object property is marked as `modifiable: false` (see `items` in the _Order_ record type), all of its nested properties are assumed to be unmodifiable as well.
 
 * Nested object properties have their own nested `properties` definition attribute. If the property is an array, it has its own `table` attribute to map the values to the table. A mandatory `parentIdColumn` attribute links the table to the parent table. A property with `role: 'id'` is required in the nested object array.
 
@@ -934,37 +932,7 @@ The `prepareCreate` hook is called before the database transaction is started an
 
 Now if we submit JSON with tried before, the order will be created with a single line item for product #1 and quantity 4.
 
-_The part below is going to change soon. Currently, it's a known issue that normalization does not work with record updates. In the fixed framework version the patch application will be separated from generation of the SQL statements allowing record modification in between those two record update phases._
-
-But how do we handle the same situation when an existing order record is updated? We have already seen the `beforeUpdateSave` hook in our `account.js` handler and we could place our line items consolidation logic in the `order.js` handler. One problem though, if we try to do it we still get the [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error caused by our `UNIQUE` database constraint violation.
-
-The problem is that the `beforeUpdateSave` hook cannot modify the record passed to it. Or rather it can modifiy it, but it will not affect the database update logic. This is because how the patch is processed by the framework&mdash;as the patch instructions are processed, both the record get updated and a series of SQL statements used to update the database is generated simultaneously _(this behaviour is going to change soon)_. So, changing the record after the patch has been applied won't change the generated SQL statements. But we still can make a check in our `beforeUpdateSave` hook in the `order.js` handler to prevent the internal server error and convert it to the submitted patch problem:
-
-```javascript
-'use strict';
-
-const ws = require('x2node-ws');
-
-module.exports = {
-
-    beforeUpdateSave(_, record) {
-
-        // verify that there are no product duplicates
-        const productRefs = new Set();
-        for (let item of record.items) {
-            if (productRefs.has(item.productRef))
-                return Promise.reject(ws.createResponse(422).setEntity({
-                    errorMessage: 'Multiple line items for the same product.'
-                }));
-            productRefs.add(item.productRef);
-        }
-    }
-};
-```
-
-This code uses the framework's low-level web-service module [x2node-ws](https://github.com/boylesoftware/x2node-ws) to create an error response and return it as a rejection. By returning a rejected promise, the hook aborts the rest of the call processing logic, rolls back the database transaction and sends the rejection reason as the response to the API client.
-
-Since this check does not actually require any database interaction, we could have implemented it as a custom validator instead. We will see how it can be done later in this tutorial.
+Since our `items` field is not modifiable (remember we marked it as `modifiable: false` in the record type definition?), we don't need to worry about similar sitution when an existing _Order_ record is updated.
 
 ### Referred Records Existence
 
@@ -1014,45 +982,6 @@ module.exports = {
 ```
 
 This is similar to what we've already done in the `accounts.js` handler, but more different checks are performed. Also note how we use `txCtx.refToId()` utility function to convert references to record IDs needed by the record filter conditions.
-
-The `accountRef` field of the _Order_ record is declared as `modifiable: false`, so it can't be updated and we don't need to check the account existence in the `beforeUpdateSave` hook. However, a new line item can be added to an order and we still must make sure that referred product exists and is available. So, let's add the code to our `beforeUpdateSave` hook in the `order.js` handler:
-
-```javascript
-...
-
-// used to save original order product references on the transaction context
-const ORIGINAL_PRODUCTS = Symbol();
-
-module.exports = {
-
-    beforeUpdate(txCtx, record) {
-
-        // save original product references
-        txCtx[ORIGINAL_PRODUCTS] = new Set(record.items.map(item => item.productRef));
-    },
-
-    beforeUpdateSave(txCtx, record) {
-
-        // verify that there are no product duplicates
-        ...
-
-        // make sure all added products exist
-        const existingProductRefs = txCtx[ORIGINAL_PRODUCTS];
-        const addedProductRefs = record.items
-            .map(item => item.productRef)
-            .filter(productRef => !existingProductRefs.has(productRef));
-        if (addedProductRefs.length > 0)
-            return txCtx.rejectIfNotExactNum(
-                'Product', [
-                    [ 'id => oneof', addedProductRefs.map(
-                        productRef => txCtx.refToId('Product', productRef)) ],
-                    [ 'available => is', true ]
-                ], addedProductRefs.length,
-                422, 'Some added products do not exist or are unavailable.'
-            );
-    }
-};
-```
 
 ### Preventing Referred Records Deletion
 
@@ -1254,11 +1183,9 @@ module.exports = {
 
 Our _Order_ record type defines a `status` field, which influences what operations can be performed on the records. Here is the logic we want to implement when working with the order statuses:
 
-* When a new order is submitted to our web-service the record template's `status` field must have value _NEW_ and its `paymentTransactionId` field must be empty. Also, the template must include two additional fields that are not defined in the record type and are not stored in the database: the credit card number and the credit card expiration date. Those fields are used to authorize the payment in our payments processing backend, after which the order is assigned a payment transaction id and is saved in the database with status _NEW_.
+* When a new order is submitted to our web-service the record template's `status` field must have value _NEW_ and its `paymentTransactionId` field must be empty. Also, the template must include two additional fields that are not defined in the record type and are not stored in the database: the credit card number and the credit card expiration date. Those fields are used to authorize the payment in our 3rd-party payments processing backend, after which the order is assigned a payment transaction id and is saved in the database with status _NEW_.
 
-* When an existing order record is being updated, the line items can be changed only if the order status is still _NEW_. The payments backend is called in that case to update the authorized payment amount.
-
-* Only the following status transitions are allowed on order record update:
+* Once placed, our orders may not be changed. When an existing order record is being updated, the only field that is allowed to be changed is the order status, which triggers corresponding action in the payments processing backend. Only the following status transitions are allowed on order record update:
 
   * From _NEW_ to _SHIPPED_, in which case the payments backend is asked to capture the authorized payment.
   * From _NEW_ or _CANCELED_, in which case the payments backend is asked to void the transaction.
@@ -1295,13 +1222,6 @@ exports.authorizePayment = function(ccNumber, ccExpDate, amount) {
     });
 };
 
-exports.updateAmount = function(txId, amount) {
-
-    return new Promise(resolve => {
-        setTimeout(() => { log(`payment ${txId} amount updated to $${amount}`); resolve(); }, 200);
-    });
-};
-
 exports.capturePayment = function(txId) {
 
     return new Promise(resolve => {
@@ -1325,7 +1245,7 @@ There is a couple of points about this code that are worth mentioning:
 
 Otherwise, it's pretty straightforward.
 
-Now, let's look at our _Order_ record type definition, in particular at the `status` field:
+Now, let's look at our _Order_ record type definition, in particular at the `status` and `paymentTransactionId` fields:
 
 ```javascript
 exports.recordTypes = {
@@ -1338,13 +1258,19 @@ exports.recordTypes = {
                 valueType: 'string',
                 validators: [ ['oneOf', 'NEW', 'SHIPPED', 'CANCELED'] ]
             },
+            'paymentTransactionId': {
+                valueType: 'string',
+                column: 'payment_txid',
+                validators: [ ['maxLength', 100] ],
+                modifiable: false
+            },
             ...
         }
     }
 };
 ```
 
-The problem here is that it will let us `POST` an order template with status value other than _NEW_, which should be disallowed. That means that we need different validation rules for the two distinct cases: creating new record and updating an existing record. As you were reading through the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module documentation, you may have noticed the feature called [Validation Sets](https://github.com/boylesoftware/x2node-validators#validation-sets). The [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module uses two different validation sets for the two cases: `onCreate` and `onUpdate`. We can use it to adjust our validation rules. Also, the rules for the `paymentTransactionId` field should require it on updates and require it to be empty on creates. Plus, it looks like we can make it unmodifiable. Our adjusted record type definition then will look like the following:
+The problem here is that it will let us `POST` an order template with status value other than _NEW_, which should be disallowed. It will also not allow us to `POST` and order template without a payment transaction id, because it is a required field (and it is indeed not nullable in the database). That means that we need different validation rules for the two distinct cases: creating new record and updating an existing record. As you were reading through the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module documentation, you may have noticed the feature called [Validation Sets](https://github.com/boylesoftware/x2node-validators#validation-sets). The [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module uses two different validation sets for the two cases: `onCreate` and `onUpdate`. We can use it to adjust our validation rules. Our adjusted record type definition then will look like the following:
 
 ```javascript
 exports.recordTypes = {
@@ -1355,19 +1281,20 @@ exports.recordTypes = {
             ...
             'status': {
                 valueType: 'string',
+				// two different sets of validators for creates and updates
                 validators: {
-                    'onCreate': [ ['oneOf', 'NEW'] ],
+                    'onCreate': [ ['oneOf', 'NEW'] ], // allow only NEW on create
                     'onUpdate': [ ['oneOf', 'NEW', 'SHIPPED', 'CANCELED'] ]
                 }
             },
             'paymentTransactionId': {
                 valueType: 'string',
                 column: 'payment_txid',
-                optional: true,
+                optional: true, // allow empty in the new record template
                 validators: {
-                    'onCreate': [ 'empty' ],
-                    'onUpdate': [ 'required' ],
-                    '*': [ ['maxLength', 100] ]
+                    'onCreate': [ 'empty' ],    // require empty on create
+                    'onUpdate': [ 'required' ], // it's not really optional
+                    '*': [ ['maxLength', 100] ] // general length limitation
                 },
                 modifiable: false
             },
@@ -1377,13 +1304,7 @@ exports.recordTypes = {
 };
 ```
 
-If you want, you can also add a `NOT NULL` constraint for the payment transaction ID to the table:
-
-```
-MariaDB [x2tutorial]> alter table orders modify column payment_txid varchar(100) not null;
-```
-
-And now, onto our handlers! First of all, let's add our new logic to the `orders.js` handler for when a new order is submitted. There are couple of things we need to do. First, we must require valid payment information in the order template. We could just write the logic for checking if the payment information is missing or is invalid right in the `prepareCreate` hook, but wouldn't it be nice to defined these fields the same way we did define our persistent fields in the record type definition? That way we would be able to use the validators. The problem is that we can't add those fields directly into out _Order_ record type definition, because those fields are not persistent and are only used with the new order record template. What we can do instead is to define another tiny record types library that will include the additional fields and that way be able to call the validators in the hook. So, let's add it to our `orders.js`:
+And now, onto our handlers! First of all, let's add new logic to the `orders.js` handler for when a new order is submitted. There are couple of things we need to do. First, we must require valid payment information in the order template. We could just write the logic for checking if the payment information is missing or is invalid right in the `prepareCreate` hook, but wouldn't it be nice to define the fields the same way we defined our persistent fields in the record type definition? That way we would be able to use the validators. The problem is that we can't add those fields directly into our _Order_ record type definition, because those fields are not persistent and are only used with the new order record template. What we can do instead is to define another tiny, local record types "library" that will include the additional fields and that way we will be able to call the validators in the hook. So, let's add it to our `orders.js`:
 
 ```javascript
 ...
@@ -1442,6 +1363,8 @@ module.exports = {
 ```
 
 Note that we had to "dance around" the `id` field a little bit. The [x2node-records](https://github.com/boylesoftware/x2node-records) module requires an ID for every record type, so we have to include it in our additional record type definition. On the other hand, the new order template does not have the ID when submitted so the validators complain because the field is required and it is missing. What we do then is we disable the implicitly assigned `required` validator on the `id` field by including it with a minus sign like `-required`.
+
+When we detect a validation error, we use the framework's low-level web-service module [x2node-ws](https://github.com/boylesoftware/x2node-ws) to create an error response and return it as a rejected promise. By returning a rejected promise, the hook aborts the rest of the call processing logic, rolls back the database transaction and sends the rejection reason as the response to the API client. The `ws.createResponse()` function is used to create API response objects.
 
 The subsequent custom handler logic happens within the transaction, so it all goes into our `beforeCreate` hook.
 
@@ -1546,15 +1469,94 @@ module.exports = {
 
 That's all. Fire up our web-service, go to the API tester and play with submitting new orders!
 
-Next, we need to turn our attention to the order update logic.
+Note, that in real life online order processing system you probably wouldn't want to keep an active database transaction with locked data while waiting for a response from a 3rd-party service like we do in the code above, but it works well for the purpose of our tutorial. Just a disclaimer&hellip;
 
-TODO
+Next, we need to turn our attention to the order update logic. In the `order.js` handler:
+
+```javascript
+'use strict';
+
+const ws = require('x2node-ws');
+
+const paymentsService = require('../payments-service.js');
+
+// used to save original order status on the transaction context
+const ORIGINAL_STATUS = Symbol();
+
+module.exports = {
+
+    beforeUpdate(txCtx, record) {
+
+        // save original order status
+        txCtx[ORIGINAL_STATUS] = record.status;
+    },
+
+    beforeUpdateSave(txCtx, record) {
+
+        // check if status changed and perform corresponding actions
+        const originalStatus = txCtx[ORIGINAL_STATUS];
+        if (record.status !== originalStatus) {
+
+            // only NEW order can be updated
+            if (originalStatus !== 'NEW')
+                return Promise.reject(ws.createResponse(409).setEntity({
+                    errorMessage: 'Invalid order status transition.'
+                }));
+
+            // execute payment backend action
+            switch (record.status) {
+            case 'SHIPPED':
+                return paymentsService.capturePayment(record.paymentTransactionId);
+            case 'CANCELED':
+                return paymentsService.voidPayment(record.paymentTransactionId);
+            }
+        }
+    }
+};
+```
 
 ### Disabling Certain Methods
 
-TODO: orders cannot be deleted.
+Once an _Order_ record is created, it cannot be deleted (its status can be changed to _CANCELED_ though). But at the moment, if we send a `DELETE` request to a `/orders/{orderId}` endpoint, our web-service will happily delete the record. We must tell our `order.js` handler that it does not support `DELETE` method.
+
+The handler objects created by the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's handlers factory follow the handler specification understood by the low-level [x2node-ws](https://github.com/boylesoftware/x2node-ws) module. The handler object exposes functions for every HTTP method it supports, such as `GET()`, `POST()`, etc. The default handler built by the `handlers.individualResource()` factory method in our `server.js` contains a `DELETE()` method, so all we need to do to disable it is to delete the method from the handler. The hook called right after the handler is constructed by the factory is called `configure`. So, in our `order.js` handler we can add:
+
+```javascript
+module.exports = {
+
+    configure() {
+
+        this.DELETE = false;
+    },
+
+    ...
+};
+```
+
+Now, if we send a `DELETE` request to `/order/{orderId}` end point we will get a nice [HTTP 405](https://tools.ietf.org/html/rfc7231#section-6.5.5) error.
 
 ### Conditional Requests
+
+One of the most powerful features of _x2node_ is automatic support for [Conditional Requests](https://tools.ietf.org/html/rfc7232). The framework can automatically generate `ETag` and `Last-Modified` HTTP headers for you, which can dramatically improve your web-service performance.
+
+At the moment, if you send a `GET` request to our, say, product, you won't get the either the `ETag` nor the `Last-Modified` headers in the response:
+
+```http
+GET /products/1 HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+
+HTTP/1.1 200 OK
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Content-Type: application/json
+Content-Length: 98
+Date: Fri, 04 Aug 2017 21:21:33 GMT
+Connection: keep-alive
+```
 
 TODO
 

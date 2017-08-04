@@ -2,42 +2,43 @@
 
 const ws = require('x2node-ws');
 
-// used to save original order product references on the transaction context
-const ORIGINAL_PRODUCTS = Symbol();
+const paymentsService = require('../payments-service.js');
+
+// used to save original order status on the transaction context
+const ORIGINAL_STATUS = Symbol();
 
 module.exports = {
 
+    configure() {
+
+        this.DELETE = false;
+    },
+
     beforeUpdate(txCtx, record) {
 
-        // save original product references
-        txCtx[ORIGINAL_PRODUCTS] = new Set(record.items.map(item => item.productRef));
+        // save original order status
+        txCtx[ORIGINAL_STATUS] = record.status;
     },
 
     beforeUpdateSave(txCtx, record) {
 
-        // verify that there are no product duplicates
-        const productRefs = new Set();
-        for (let item of record.items) {
-            if (productRefs.has(item.productRef))
-                return Promise.reject(ws.createResponse(422).setEntity({
-                    errorMessage: 'Multiple line items for the same product.'
-                }));
-            productRefs.add(item.productRef);
-        }
+        // check if status changed and perform corresponding actions
+        const originalStatus = txCtx[ORIGINAL_STATUS];
+        if (record.status !== originalStatus) {
 
-        // make sure all added products exist
-        const existingProductRefs = txCtx[ORIGINAL_PRODUCTS];
-        const addedProductRefs = record.items
-            .map(item => item.productRef)
-            .filter(productRef => !existingProductRefs.has(productRef));
-        if (addedProductRefs.length > 0)
-            return txCtx.rejectIfNotExactNum(
-                'Product', [
-                    [ 'id => oneof', addedProductRefs.map(
-                        productRef => txCtx.refToId('Product', productRef)) ],
-                    [ 'available => is', true ]
-                ], addedProductRefs.length,
-                422, 'Some added products do not exist or are unavailable.'
-            );
+            // only NEW order can be updated
+            if (originalStatus !== 'NEW')
+                return Promise.reject(ws.createResponse(409).setEntity({
+                    errorMessage: 'Invalid order status transition.'
+                }));
+
+            // execute payment backend action
+            switch (record.status) {
+            case 'SHIPPED':
+                return paymentsService.capturePayment(record.paymentTransactionId);
+            case 'CANCELED':
+                return paymentsService.voidPayment(record.paymentTransactionId);
+            }
+        }
     }
 };

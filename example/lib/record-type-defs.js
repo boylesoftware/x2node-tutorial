@@ -1,5 +1,21 @@
 'use strict';
 
+exports.validatorDefs = {
+    'notSaturday': function(_, ctx, value) {
+
+        // don't check if the value is missing or an invalid date
+        if (!ctx.hasErrorsFor(ctx.currentPointer)) {
+
+            // add validation error if the date is a Saturday
+            if ((new Date(value)).getUTCDay() === 6)
+                ctx.addError('Live the world alone once a week!');
+        }
+
+        // proceed with the value unchanged
+        return value;
+    }
+};
+
 exports.recordTypes = {
     'Product': {
         table: 'products',
@@ -18,7 +34,7 @@ exports.recordTypes = {
             },
             'price': {
                 valueType: 'number',
-                validators: [ ['range', 0.00, 999.99] ]
+                validators: [ ['precision', 2], ['range', 0.00, 999.99] ]
             },
             'available': {
                 valueType: 'boolean',
@@ -50,7 +66,7 @@ exports.recordTypes = {
             'passwordDigest': {
                 valueType: 'string',
                 column: 'pwd_digest',
-                validators: [ ['pattern', /[0-9a-f]{40}/] ]
+                validators: [ ['pattern', /^[0-9a-f]{40}$/] ]
             }
         }
     },
@@ -69,18 +85,26 @@ exports.recordTypes = {
             'placedOn': {
                 valueType: 'string',
                 column: 'placed_on',
-                validators: [ 'date' ],
+                validators: [ 'date', 'notSaturday' ],
                 modifiable: false
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneOf', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
+                validators: {
+                    'onCreate': [ ['oneOf', 'NEW'] ],
+                    'onUpdate': [ ['oneOf', 'NEW', 'SHIPPED', 'CANCELED'] ]
+                }
             },
             'paymentTransactionId': {
                 valueType: 'string',
                 column: 'payment_txid',
                 optional: true,
-                validators: [ ['maxLength', 100] ]
+                validators: {
+                    'onCreate': [ 'empty' ],
+                    'onUpdate': [ 'required' ],
+                    '*': [ ['maxLength', 100] ]
+                },
+                modifiable: false
             },
             'items': {
                 valueType: 'object[]',

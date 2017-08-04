@@ -1,28 +1,49 @@
 'use strict';
 
 const crypto = require('crypto');
+const common = require('x2node-common');
 
-exports.authorizePayment = function(ccNumber, ccExpDate) {
+const log = common.getDebugLogger('PAYMENTS');
+
+exports.authorizePayment = function(ccNumber, ccExpDate, amount) {
 
     return new Promise((resolve, reject) => {
+
+        // check expiration date
+        const ccExpDateDt = new Date(ccExpDate);
+        const nowDt = new Date();
+        if (ccExpDateDt.getUTCFullYear() * 12 + ccExpDateDt.getUTCMonth() <
+            nowDt.getUTCFullYear() * 12 + nowDt.getUTCMonth())
+            return reject(new Error('Credit card has expired.'));
+
+        // all good, generate payment transaction id
         crypto.randomBytes(20, (err, buf) => {
             if (err)
                 return reject(err);
-            return resolve(buf.toString('hex'));
+			const txId = buf.toString('hex');
+            log(`payment ${txId} authorized for $${amount}`);
+            resolve(txId);
         });
+    });
+};
+
+exports.updateAmount = function(txId, amount) {
+
+    return new Promise(resolve => {
+        setTimeout(() => { log(`payment ${txId} amount updated to $${amount}`); resolve(); }, 200);
     });
 };
 
 exports.capturePayment = function(txId) {
 
     return new Promise(resolve => {
-        setTimeout(() => resolve(), 200);
+        setTimeout(() => { log(`payment ${txId} captured`); resolve(); }, 200);
     });
 };
 
 exports.voidPayment = function(txId) {
 
     return new Promise(resolve => {
-        setTimeout(() => resolve(), 200);
+        setTimeout(() => { log(`payment ${txId} voided`); resolve(); }, 200);
     });
 };

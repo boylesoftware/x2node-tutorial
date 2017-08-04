@@ -122,7 +122,7 @@ CREATE TABLE orders (
     id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id INTEGER UNSIGNED NOT NULL,
     placed_on CHAR(10) NOT NULL, -- in YYYY-MM-DD format
-    status ENUM('ACCEPTED', 'SHIPPED', 'CANCELED') NOT NULL,
+    status ENUM('NEW', 'SHIPPED', 'CANCELED') NOT NULL,
     payment_txid VARCHAR(100), -- payments backend transaction id
     FOREIGN KEY (account_id) REFERENCES accounts (id)
 );
@@ -279,7 +279,7 @@ exports.recordTypes = {
             },
             'price': {
                 valueType: 'number',
-                validators: [ ['range', 0.00, 999.99] ]
+                validators: [ ['precision', 2], ['range', 0.00, 999.99] ]
             },
             'available': {
                 valueType: 'boolean',
@@ -311,7 +311,7 @@ exports.recordTypes = {
             'passwordDigest': {
                 valueType: 'string',
                 column: 'pwd_digest',
-                validators: [ ['pattern', /[0-9a-f]{40}/] ]
+                validators: [ ['pattern', /^[0-9a-f]{40}$/] ]
             }
         }
     },
@@ -335,7 +335,7 @@ exports.recordTypes = {
             },
             'status': {
                 valueType: 'string',
-                validators: [ ['oneof', 'ACCEPTED', 'SHIPPED', 'CANCELED'] ]
+                validators: [ ['oneof', 'NEW', 'SHIPPED', 'CANCELED'] ]
             },
             'paymentTransactionId': {
                 valueType: 'string',
@@ -390,7 +390,7 @@ If you don't feel like reading the full documentation for those modules right at
 
 * Property definition `column` attribute is used to map the property to the corresponding database column. By default, the column is assumed to have the same name as the property, so we use the `column` attribute only where it is not so.
 
-* Property definition attribute `validators` provides an array of constraints for the property values. In this example we only use built-in validators provided by the framework. See [Standard Validators](https://github.com/boylesoftware/x2node-validators#standard-validators) section of the `x2node-validators` module's manual for the complete standard validators list. Some validators are applied by the framework automatically. For example, if a property value type is declared to be a `number` and the client submits a record with a string via the API, the framework will reject such record.
+* Property definition attribute `validators` provides an array of constraints for the property values. In this example we only use built-in validators provided by the framework. See [Standard Validators](https://github.com/boylesoftware/x2node-validators#standard-validators) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual for the complete standard validators list. Some validators are applied by the framework automatically. For example, if a property value type is declared to be a `number` and the client submits a record with a string via the API, the framework will reject such record.
 
 * Some validators are so called _normalizers_. They may modify the property value in some situations. See `lowercase` normalizer in the validators list of the `email` property on the _Account_ record type. When, for example, a new account record submitted via a `POST` to our application's _/accounts_ endpoint includes `email` property that contains uppercase letters, the framework will transform it to all lowercase before saving the account record to the database.
 
@@ -479,15 +479,15 @@ ws.createApplication()
 
 As with the record type definitions, nothing replaces reading the manuals of the modules we used in the `server.js`. The two new modules are [x2node-ws](https://github.com/boylesoftware/x2node-ws) and [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources). But if you want to go ahead quick, here are some notes about the code in `server.js`:
 
-* Our record type definitions are processed by the `x2node-records` module, which builds the record types library object (called `recordTypes` in the code) from it. The record type definitions are extendable, so different modules can add their own specific definition attributes. In our definitions we use such attributes as `table` and `column` to map the record types to the database tables and columns. These attributes are consumed by the _Database Operations_ (DBOs) module. The `x2node-dbos` module itself acts as a record types library extension and must be added to the library builder before passing the definitions to it. That takes place in the `records.with(dbos)` line.
+* Our record type definitions are processed by the [x2node-records](https://github.com/boylesoftware/x2node-records) module, which builds the record types library object (called `recordTypes` in the code) from it. The record type definitions are extendable, so different modules can add their own specific definition attributes. In our definitions we use such attributes as `table` and `column` to map the record types to the database tables and columns. These attributes are consumed by the _Database Operations_ (DBOs) module. The [x2node-dbos](https://github.com/boylesoftware/x2node-dbos) module itself acts as a record types library extension and must be added to the library builder before passing the definitions to it. That takes place in the `records.with(dbos)` line.
 
 * The central piece of the DBOs module is the _DBOs Factory_. A single factory object is maintained throughout the application lifecycle and is used to build and execute database operations. Creating the factory involves providing the DBOs module with the record types library and the database flavor (the factory will be building SQL queries, which are sometimes rather complex, so it needs to know the underlying RDBMS implementation peculiarities).
 
 * We use the 3rd party low-level `mysql` module to create the database connections pool. To standardize the connections handling for the framework (and the application, if it needs it), the DBOs module can wrap the pool and create a _data source_ from it with a standard interface. See `dboFactory.adaptDataSource(pool)` line in the web-service code.
 
-* The `x2node-ws` module's `createApplication()` method is used to build the web-service and subsequently run it. Its `addEndpoint()` method is used to define our RESTful API endpoints. The method takes two arguments: the regular expression for the endpoint URI and the endpoint handler implementation, which is normally as custom application component where all the API call handling logic takes place. The endpoint URI regular expression is applied to the whole URI (no `^` and `$` are needed) and can contain capturing groups. The capturing groups define so called _positional URI parameters_ that are made available to the handler. We use them in the individual resource endpoints to provide handlers with the record ID from the endpoint URI.
+* The [x2node-ws](https://github.com/boylesoftware/x2node-ws) module's `createApplication()` method is used to build the web-service and subsequently run it. Its `addEndpoint()` method is used to define our RESTful API endpoints. The method takes two arguments: the regular expression for the endpoint URI and the endpoint handler implementation, which is normally as custom application component where all the API call handling logic takes place. The endpoint URI regular expression is applied to the whole URI (no `^` and `$` are needed) and can contain capturing groups. The capturing groups define so called _positional URI parameters_ that are made available to the handler. We use them in the individual resource endpoints to provide handlers with the record ID from the endpoint URI.
 
-* The high level `x2node-ws-resources` module implements the logic for handling resources (API endpoints that represent persistent records and allow the search, create, read, update and delete operations). The module provides an endpoint handler factory called `handlers` in our code. The factory builds two types of endpoint handlers: the collection resource, which allows search (HTTP method `GET`) and record creation (HTTP method `POST`) operations, and the individual resource, which allows reading a single record (HTTP `GET` method), updating it (HTTP `PATCH` method) and deleting it (HTTP `DELETE` method).
+* The high level [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module implements the logic for handling resources (API endpoints that represent persistent records and allow the search, create, read, update and delete operations). The module provides an endpoint handler factory called `handlers` in our code. The factory builds two types of endpoint handlers: the collection resource, which allows search (HTTP method `GET`) and record creation (HTTP method `POST`) operations, and the individual resource, which allows reading a single record (HTTP `GET` method), updating it (HTTP `PATCH` method) and deleting it (HTTP `DELETE` method).
 
 * In the most basic form, all the handler factory needs is the handled record type name. All the magic happens in the default handler implementation. As are going to see later in this tutorial, the default handlers are usually extended with the custom application code.
 
@@ -609,7 +609,7 @@ To perform records collection search, the collection resource endpoint takes que
 $ curl -v "http://localhost:3001/products?f$available&f$name:pre=h&p=name,price&o=name&r=0,10" | python -mjson.tool
 ```
 
-The query above requests all available products with names starting with "H" (case-insensitive), in the returned records it asks only to include the product name and the product price, it asks to order the `records` array in the response by the product name and it asks to include only first 10 mathcing records in it. To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` module's manual.
+The query above requests all available products with names starting with "H" (case-insensitive), in the returned records it asks only to include the product name and the product price, it asks to order the `records` array in the response by the product name and it asks to include only first 10 mathcing records in it. To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's manual.
 
 Now we can try to update our product record. To do that, we are going to send a `PATCH` request to the _Product_ individual resource endpoint with a [JSON patch](https://tools.ietf.org/html/rfc6902) specification in the body. Let's change our product price and remove the optional product description. To do that, create the patch document in `patch-product.json`:
 
@@ -669,13 +669,13 @@ Note how we use references to records of other types. When we search records, we
 $ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.tool
 ```
 
-Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you've read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the `x2node-ws-resources` manual, haven't you?
+Along with the `records` list, in the response we are going to see `referredRecords` object that maps requested references to the corresponding records. All of that you already know since you've read the [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) manual, haven't you?
 
 ## Tightening the Screws
 
 It's nice that we have a what appears to be fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let go over them one by one and fix them.
 
-But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. The description of all the different hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the `x2node-ws-resources` module manual.
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. The description of all the different hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
 
 We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
 
@@ -731,6 +731,62 @@ module.exports = {};
 ```
 
 Now, let's have a look at our problems.
+
+### Custom Validation
+
+The standard validators provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module that we used in our record type definitions cover most of what we need in terms of validating record data submitted to the API when a new record is created or an existing record is updated. Sometimes, however, standard validators are not sufficient. For example, let's say we don't want to allow any _Order_ record's `placedOn` field ever to be a Saturday. In our `record-type-defs.js` module we can add a custom validator and call it `notSaturday`:
+
+```javascript
+exports.validatorDefs = {
+    'notSaturday': function(_, ctx, value) {
+
+        // don't check if the value is missing or an invalid date
+        if (!ctx.hasErrorsFor(ctx.currentPointer)) {
+
+            // add validation error if the date is a Saturday
+            if ((new Date(value)).getUTCDay() === 6)
+                ctx.addError('Live the world alone once a week!');
+        }
+
+        // proceed with the value unchanged
+        return value;
+    }
+};
+```
+
+And then add the validator to the `placedOn` field definition:
+
+```javascript
+exports.recordTypes = {
+    ...
+    'Order': {
+        ...
+        properties: {
+            ...
+            'placedOn': {
+                ...
+                validators: [ 'date', 'notSaturday' ],
+                ...
+            },
+            ...
+        }
+    }
+};
+```
+
+The custom validator function receives three arguments:
+
+* Parameters for a parameterized validator, such as `['maxLength', 100]`, etc. Our validator does not have any parameters, so we don't use this argument.
+* Validation context, which is the API that the framework provides to the validator implementation. See [Validation Context](https://github.com/boylesoftware/x2node-validators#validation-context) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual or the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-validators-ValidationContext.html).
+* The field value.
+
+If you look at our custom validator code, you'll see that we first check if there are ny validation errors already associated with the field. The validators are called by the framework in the same order they are specified in the record type definition. In our case, our `notSaturday` validator is preceded by the implicit check that the value is provided (the field is not optional) and the explicit check that the value is a valid date (the `date` standard validator). It makes not sense to test of the date is a Saturday if it's missing or is not a valid date. The `ctx.hasErrorsFor()` function allows us to check if the preceding validators failed.
+
+Then, we check if the date is a Saturday and if so, add a validation error to the context.
+
+And finally, we return the field value. Remember that validators are not _just_ validators. They can also be _value normalizers_ (e.g. the `lowercase` normalizer we used on the `email` field of the _Account_ record type). The function can return a modified value and that will be the value set back into the record field upon the validation completion. Since our validators is a _pure validator_ and does not normalize the value, we simple return it as it was passed to us.
+
+See the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual for more details on different validation/normalization uses including custome validation error messages, error message internationalization, validation sets, etc.
 
 ### New Record Field Uniqueness
 
@@ -878,9 +934,11 @@ The `prepareCreate` hook is called before the database transaction is started an
 
 Now if we submit JSON with tried before, the order will be created with a single line item for product #1 and quantity 4.
 
-But how do we handle the same situation when an existing order record is updated? We have already seen the `beforeUpdateSave` hook in our `account.js` handler and we could place our line items consolidation logic it in the `order.js` handler. One problem though, if we try to do it we still get the [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error caused by our `UNIQUE` database constraint violation.
+_The part below is going to change soon. Currently, it's a known issue that normalization does not work with record updates. In the fixed framework version the patch application will be separated from generation of the SQL statements allowing record modification in between those two record update phases._
 
-The problem is that the `beforeUpdateSave` hook cannot modify the record passed to it. Or rather it can modifiy it, but it will not affect the database updated logic. This is because how the patch is processed by the framework&mdash;as the patch instructions are processed, both the record get updated and a series of SQL statements used to update the database is generated simultaneously. So, changing the record after the patch has been applied won't change the generated SQL statements. But we still can make a check in our `beforeUpdateSave` hook in the `order.js` handler to prevent the internal server error and convert it to the submitted patch problem:
+But how do we handle the same situation when an existing order record is updated? We have already seen the `beforeUpdateSave` hook in our `account.js` handler and we could place our line items consolidation logic in the `order.js` handler. One problem though, if we try to do it we still get the [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error caused by our `UNIQUE` database constraint violation.
+
+The problem is that the `beforeUpdateSave` hook cannot modify the record passed to it. Or rather it can modifiy it, but it will not affect the database update logic. This is because how the patch is processed by the framework&mdash;as the patch instructions are processed, both the record get updated and a series of SQL statements used to update the database is generated simultaneously _(this behaviour is going to change soon)_. So, changing the record after the patch has been applied won't change the generated SQL statements. But we still can make a check in our `beforeUpdateSave` hook in the `order.js` handler to prevent the internal server error and convert it to the submitted patch problem:
 
 ```javascript
 'use strict';
@@ -904,7 +962,7 @@ module.exports = {
 };
 ```
 
-This code uses the framework's low-level web-service module `x2node-ws` to create an error response and return it as a rejection. By returning a rejected promise, the hook aborts the rest of the call processing logic, rolls back the database transaction and sends the rejection reason as the response to the API client.
+This code uses the framework's low-level web-service module [x2node-ws](https://github.com/boylesoftware/x2node-ws) to create an error response and return it as a rejection. By returning a rejected promise, the hook aborts the rest of the call processing logic, rolls back the database transaction and sends the rejection reason as the response to the API client.
 
 Since this check does not actually require any database interaction, we could have implemented it as a custom validator instead. We will see how it can be done later in this tutorial.
 
@@ -935,21 +993,21 @@ module.exports = {
 
     beforeCreate(txCtx, recordTmpl) {
 
-        // check if all products exist and are available
-        return txCtx.rejectIfNotExactNum(
+        // check that account exists
+        return txCtx.rejectIfNotExists(
+            'Account', [
+                [ 'id => is', txCtx.refToId('Account', recordTmpl.accountRef) ]
+            ],
+            400, 'Account does not exist.'
+
+        // then check if all products exist and are available
+        ).then(() => txCtx.rejectIfNotExactNum(
             'Product', [
                 [ 'id => oneof', recordTmpl.items.map(
                     item => txCtx.refToId('Product', item.productRef)) ],
                 [ 'available => is', true ]
             ], recordTmpl.items.length,
             400, 'Some products do not exist or are unavailable.'
-
-        // then check that account exists
-        ).then(() => txCtx.rejectIfNotExists(
-            'Account', [
-                [ 'id => is', txCtx.refToId('Account', recordTmpl.accountRef) ]
-            ],
-            400, 'Account does not exist.'
         ));
     }
 };
@@ -1048,15 +1106,453 @@ module.exports = {
 };
 ```
 
-Note how we extract the addressed record (_Account_ or _Product_) ID from the call URI. When we used `ws.addEntpoint()` function in `server.js` to define the `/accounts/{accountId}` and `/products/{productId}` endpoints, we used capturing groups in the URI regular expressions. Those groups translate to the `uriParams` array on the API call object available to the handlers via the `call` property of the transaction context. The API call object is what the low-level `x2node-ws` module operates with and it exposes many useful things to the handlers. See its full description in the [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) section of the manual as well as its full [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-ServiceCall.html).
+Note how we extract the addressed record (_Account_ or _Product_) ID from the call URI. When we used `ws.addEntpoint()` function in `server.js` to define the `/accounts/{accountId}` and `/products/{productId}` endpoints, we used capturing groups in the URI regular expressions. Those groups translate to the `uriParams` array on the API call object available to the handlers via the `call` property of the transaction context. The API call object is what the low-level [x2node-ws](https://github.com/boylesoftware/x2node-ws) module operates with and it exposes many useful things to the handlers. See its full description in the [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) section of the manual as well as its full [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-ServiceCall.html).
 
 And you also can see that in this case we don't need to call `txCtx.refToId()` function to convert the reference to the ID as we are getting the ID straight from the URI.
 
+### Backend Field Value Calculation
+
+When we work with our _Account_ records we have to provide the `passwordDigest` value to the API, which means the client code has to deal with the digest calculation, while the password check will be ultimately performed in the backend. That means that we will have to maintain the digest algorithms in sync on both the client and the server side. Besides, cyptographic digest functionality may not be readily available on the client side. All that means that we'd rather have the client send the account password in plain text when it creates and updates _Account_ records and have our web-service calculate the digests.
+
+First, let's see how it can be done for the new account creation call. The record template submitted with the `POST` call to our `/accounts` endpoint can have fields that are not described in the record type definition. Such fields are simply ignored by the framework. So, we could include `password` field in the record template and have a hook in our `accounts.js` handler convert it to the `passwordDigest` value. That must happen before the template is validated (`passwordDigest` is a required field) and the hook for that is called `prepareCreateSpec`:
+
+```javascript
+...
+
+const crypto = require('crypto');
+
+module.exports = {
+
+    prepareCreateSpec(_, recordTmpl) {
+
+        // calculate password digest if plain password was attached
+        if (typeof recordTmpl.password === 'string') {
+            recordTmpl.passwordDigest = crypto
+                .createHash('sha1')
+                .update(recordTmpl.password, 'utf8')
+                .digest('hex');
+            delete recordTmpl.password;
+        }
+    },
+
+    ...
+};
+```
+
+Now, if we `POST` something like this:
+
+```json
+{
+  "email": "bones@walrus.com",
+  "firstName": "Billy",
+  "lastName": "Bones",
+  "password": "hoistthesales!"
+}
+```
+
+the record created will be something like this:
+
+```json
+{
+  "id": 3,
+  "email": "bones@walrus.com",
+  "firstName": "Billy",
+  "lastName": "Bones",
+  "passwordDigest": "280c45042d9208401640e7fa7065abc31056d6b6"
+}
+```
+
+And now let's see how we can do the same on the record update. There is a hook called `prepareUpdateSpec`, which is called before the patch specification document is parsed by the handler. That gives the handler a chance to modify the patch document before it is processed. So far when we used the `PATCH` calls we used the [JSON Patch](https://tools.ietf.org/html/rfc6902) format. The problem here is that this format is such that it's tricky to write logic that analyzes the patch document, checks if it tries to update `password` field and modify it before proceeding. The handler, however, also supports another patch document format, which is [JSON Merge Patch](https://tools.ietf.org/html/rfc7396). We can use it, so that our hook logic is similar to what we have in the `prepareCreateSpec` hook. So, in the `account.js` handler:
+
+```javascript
+...
+
+const crypto = require('crypto');
+
+module.exports = {
+
+    prepareUpdateSpec(txCtx, patchSpec) {
+
+        // calculate password digest if plain password was included in merge patch
+        if (txCtx.call.entityContentType === 'application/merge-patch+json' &&
+            typeof patchSpec.password === 'string') {
+            patchSpec.passwordDigest = crypto
+                .createHash('sha1')
+                .update(patchSpec.password, 'utf8')
+                .digest('hex');
+            delete patchSpec.password;
+        }
+    },
+
+    ...
+};
+```
+
+Now if we send a `PATCH` with the following merge patch document to `/accounts/3` endpoint:
+
+```json
+{
+  "firstName": "William",
+  "password": "piecesofeight!"
+}
+```
+
+we will get our updated record:
+
+```json
+{
+  "id": 3,
+  "email": "bones@walrus.com",
+  "firstName": "William",
+  "lastName": "Bones",
+  "passwordDigest": "5f20ff23887f744dc15da7987a8b6e92e303becd"
+}
+```
+
+But if we really want to support both patch formats, we will have to write something like this in our `account.js`:
+
+```javascript
+function digestPassword(password) {
+
+    return crypto
+        .createHash('sha1')
+        .update(password, 'utf8')
+        .digest('hex');
+}
+
+module.exports = {
+
+    prepareUpdateSpec(txCtx, patchSpec) {
+
+        // calculate password digest if plain password is updated
+        switch (txCtx.call.entityContentType) {
+        case 'application/merge-patch+json':
+            if (typeof patchSpec.password === 'string') {
+                patchSpec.passwordDigest = digestPassword(patchSpec.password);
+                delete patchSpec.password;
+            }
+            break;
+        case 'application/json-patch+json':
+            txCtx.patchSpec = txCtx.patchSpec.map(op => (
+                op.op === 'replace' && op.path === '/password' &&
+                    typeof op.value === 'string'
+                    ? {
+                        op: 'replace',
+                        path: '/passwordDigest',
+                        value: digestPassword(op.value)
+                    }
+                    : op
+            ));
+        }
+    },
+
+    ...
+};
+```
+
 ### Backend Operations
 
-Our _Order_ record type defines a `status` field, which influences what operations can be performed on the records.
+Our _Order_ record type defines a `status` field, which influences what operations can be performed on the records. Here is the logic we want to implement when working with the order statuses:
+
+* When a new order is submitted to our web-service the record template's `status` field must have value _NEW_ and its `paymentTransactionId` field must be empty. Also, the template must include two additional fields that are not defined in the record type and are not stored in the database: the credit card number and the credit card expiration date. Those fields are used to authorize the payment in our payments processing backend, after which the order is assigned a payment transaction id and is saved in the database with status _NEW_.
+
+* When an existing order record is being updated, the line items can be changed only if the order status is still _NEW_. The payments backend is called in that case to update the authorized payment amount.
+
+* Only the following status transitions are allowed on order record update:
+
+  * From _NEW_ to _SHIPPED_, in which case the payments backend is asked to capture the authorized payment.
+  * From _NEW_ or _CANCELED_, in which case the payments backend is asked to void the transaction.
+
+For our tutorial, let's create a mock payments backend service in `lib/payments-service.js` in our project. Something like this:
+
+```javascript
+'use strict';
+
+const crypto = require('crypto');
+const common = require('x2node-common');
+
+const log = common.getDebugLogger('PAYMENTS');
+
+exports.authorizePayment = function(ccNumber, ccExpDate, amount) {
+
+    return new Promise((resolve, reject) => {
+
+        // check expiration date
+        const ccExpDateDt = new Date(ccExpDate);
+        const nowDt = new Date();
+        if (ccExpDateDt.getUTCFullYear() * 12 + ccExpDateDt.getUTCMonth() <
+            nowDt.getUTCFullYear() * 12 + nowDt.getUTCMonth())
+            return reject(new Error('Credit card has expired.'));
+
+        // all good, generate payment transaction id
+        crypto.randomBytes(20, (err, buf) => {
+            if (err)
+                return reject(err);
+			const txId = buf.toString('hex');
+            log(`payment ${txId} authorized for $${amount}`);
+            resolve(txId);
+        });
+    });
+};
+
+exports.updateAmount = function(txId, amount) {
+
+    return new Promise(resolve => {
+        setTimeout(() => { log(`payment ${txId} amount updated to $${amount}`); resolve(); }, 200);
+    });
+};
+
+exports.capturePayment = function(txId) {
+
+    return new Promise(resolve => {
+        setTimeout(() => { log(`payment ${txId} captured`); resolve(); }, 200);
+    });
+};
+
+exports.voidPayment = function(txId) {
+
+    return new Promise(resolve => {
+        setTimeout(() => { log(`payment ${txId} voided`); resolve(); }, 200);
+    });
+};
+```
+
+There is a couple of points about this code that are worth mentioning:
+
+* The operations are asynchronous and return promises. This is to emulate calls to a thrid-party backend service. The `authorizePayment()` method can trigger a payment backend error condition if the submitted credit card expiration date is in the past (useful for testing!).
+
+* We use the debug logger provided by the framework's [x2node-common](https://github.com/boylesoftware/x2node-common) module. To see the message, make sure you include "PAYMENTS" in your `NODE_DEBUG` environment variable (see [Node.js documentation](https://nodejs.org/dist/latest-v8.x/docs/api/util.html#util_util_debuglog_section) if you are not yet familiar with it).
+
+Otherwise, it's pretty straightforward.
+
+Now, let's look at our _Order_ record type definition, in particular at the `status` field:
+
+```javascript
+exports.recordTypes = {
+    ...
+    'Order': {
+        ...
+        properties: {
+            ...
+            'status': {
+                valueType: 'string',
+                validators: [ ['oneOf', 'NEW', 'SHIPPED', 'CANCELED'] ]
+            },
+            ...
+        }
+    }
+};
+```
+
+The problem here is that it will let us `POST` an order template with status value other than _NEW_, which should be disallowed. That means that we need different validation rules for the two distinct cases: creating new record and updating an existing record. As you were reading through the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module documentation, you may have noticed the feature called [Validation Sets](https://github.com/boylesoftware/x2node-validators#validation-sets). The [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module uses two different validation sets for the two cases: `onCreate` and `onUpdate`. We can use it to adjust our validation rules. Also, the rules for the `paymentTransactionId` field should require it on updates and require it to be empty on creates. Plus, it looks like we can make it unmodifiable. Our adjusted record type definition then will look like the following:
+
+```javascript
+exports.recordTypes = {
+    ...
+    'Order': {
+        ...
+        properties: {
+            ...
+            'status': {
+                valueType: 'string',
+                validators: {
+                    'onCreate': [ ['oneOf', 'NEW'] ],
+                    'onUpdate': [ ['oneOf', 'NEW', 'SHIPPED', 'CANCELED'] ]
+                }
+            },
+            'paymentTransactionId': {
+                valueType: 'string',
+                column: 'payment_txid',
+                optional: true,
+                validators: {
+                    'onCreate': [ 'empty' ],
+                    'onUpdate': [ 'required' ],
+                    '*': [ ['maxLength', 100] ]
+                },
+                modifiable: false
+            },
+            ...
+        }
+    }
+};
+```
+
+If you want, you can also add a `NOT NULL` constraint for the payment transaction ID to the table:
+
+```
+MariaDB [x2tutorial]> alter table orders modify column payment_txid varchar(100) not null;
+```
+
+And now, onto our handlers! First of all, let's add our new logic to the `orders.js` handler for when a new order is submitted. There are couple of things we need to do. First, we must require valid payment information in the order template. We could just write the logic for checking if the payment information is missing or is invalid right in the `prepareCreate` hook, but wouldn't it be nice to defined these fields the same way we did define our persistent fields in the record type definition? That way we would be able to use the validators. The problem is that we can't add those fields directly into out _Order_ record type definition, because those fields are not persistent and are only used with the new order record template. What we can do instead is to define another tiny record types library that will include the additional fields and that way be able to call the validators in the hook. So, let's add it to our `orders.js`:
+
+```javascript
+...
+
+// load the framework modules
+const records = require('x2node-records');
+const validators = require('x2node-validators');
+const ws = require('x2node-ws');
+
+// define additional fields in the new order template
+const orderTemplateDef = records.with(validators).buildLibrary({
+    recordTypes: {
+        'OrderTemplate': {
+            properties: {
+
+                // id field definition is required
+                'id': {
+                    valueType: 'number',
+                    role: 'id',
+                    validators: [ '-required' ] // don't require
+                },
+
+                // payment information
+                'creditCardNumber': {
+                    valueType: 'string',
+                    validators: [ 'ccNumber' ]
+                },
+                'creditCardExpDate': {
+                    valueType: 'string',
+                    validators: [ ['pattern', /20\d{2}-(0[1-9]|1[0-2])/] ]
+                }
+            }
+        }
+    }
+});
+
+module.exports = {
+
+    prepareCreate(_, recordTmpl) {
+
+        // make sure we have payment information in the record template
+        const errors = validators.normalizeRecord(
+            orderTemplateDef, 'OrderTemplate', recordTmpl);
+        if (errors)
+            return Promise.reject(ws.createResponse(400).setEntity({
+                errorMessage: 'Invalid new order data.',
+                validationErrors: errors
+            }));
+
+        // consolidate line items by product
+        ...
+    },
+
+    ...
+};
+```
+
+Note that we had to "dance around" the `id` field a little bit. The [x2node-records](https://github.com/boylesoftware/x2node-records) module requires an ID for every record type, so we have to include it in our additional record type definition. On the other hand, the new order template does not have the ID when submitted so the validators complain because the field is required and it is missing. What we do then is we disable the implicitly assigned `required` validator on the `id` field by including it with a minus sign like `-required`.
+
+The subsequent custom handler logic happens within the transaction, so it all goes into our `beforeCreate` hook.
+
+First, in order to calculate the order amount we need to load the ordered products information. In the previous iteration of our hook we are already checking if all the ordered products exist and are avaiable. We used `rejectIfNotExactNum()` helper function on the transaction context for that. The function is great, but it only counts the matching records without returning us the records' data. So, we need to replace it with a `fetch()` helper function that allows loading the matched records from the database:
+
+```javascript
+module.exports = {
+
+    ...
+
+    beforeCreate(txCtx, recordTmpl) {
+
+        // check that account exists
+        return txCtx.rejectIfNotExists(
+            ...
+
+        // then fetch ordered product prices to calculate the order amount
+        ).then(() => txCtx.fetch(
+            'Product', {
+                props: [ 'price' ],
+                filter: [
+                    [ 'id => oneof', recordTmpl.items.map(
+                        item => txCtx.refToId('Product', item.productRef)) ],
+                    [ 'available => is', true ]
+                ],
+                lock: 'shared'
+            }
+
+        // then process the fetched products
+        )).then(productsResult => {
+
+            // make sure all products exist and are available
+            if (productsResult.records.length !== recordTmpl.items.length)
+                return Promise.reject(ws.createResponse(400).setEntity({
+                    errorMessage: 'Some products do not exist or are unavailable.'
+                }));
+
+            // calculate the order total
+            const productPrices = productsResult.records.reduce(
+                (productPrices, product) => {
+                    productPrices[`Product#${product.id}`] = product.price;
+                    return productPrices;
+                }, new Object());
+            return recordTmpl.items.reduce(
+                (orderAmount, item) => (
+                    orderAmount + productPrices[item.productRef] * item.quantity
+                ), 0);
+        })
+
+        ...
+    }
+
+};
+```
+
+Note that we lock the matched product records in _shared_ mode so that nobody changes or deletes them before the order transaction is completed.
+
+Now that we have the order amount and everything about the order has been validated, we can call our payments backend service and authorize the payment. Once the payment is authorized, we will have the payment transaction ID, which we can add to the order record template and proceed with saving it:
+
+```javascript
+...
+
+// load the payments backend service module
+const paymentsService = require('../payments-service.js');
+
+module.exports = {
+
+    ...
+
+    beforeCreate(txCtx, recordTmpl) {
+
+        // check that account exists
+        return txCtx.rejectIfNotExists(
+            ...
+
+        // then fetch ordered product prices to calculate the order amount
+        ).then(() => txCtx.fetch(
+            ...
+
+        // then process the fetched products
+        )).then(productsResult => {
+            ...
+
+        // then authorize the payment and get the payment transaction id
+        }).then(orderAmount => paymentsService.authorizePayment(
+            recordTmpl.creditCardNumber, recordTmpl.creditCardExpDate, orderAmount
+
+            // catch payment error
+            ).catch(paymentError => Promise.reject(
+                ws.createResponse(400).setEntity({
+                    errorMessage: `Could not process payment: ${paymentError.message}`
+                })
+            )
+
+        // then set the payment transaction id on the order record
+        )).then(paymentTransactionId => {
+            recordTmpl.paymentTransactionId = paymentTransactionId;
+        });
+    }
+};
+```
+
+That's all. Fire up our web-service, go to the API tester and play with submitting new orders!
+
+Next, we need to turn our attention to the order update logic.
 
 TODO
+
+### Disabling Certain Methods
+
+TODO: orders cannot be deleted.
 
 ### Conditional Requests
 

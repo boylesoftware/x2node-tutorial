@@ -1,9 +1,43 @@
 'use strict';
 
+const crypto = require('crypto');
+
 // used to save the original email value on the transaction context
 const ORIGINAL_EMAIL = Symbol();
 
+function digestPassword(password) {
+
+    return crypto
+        .createHash('sha1')
+        .update(password, 'utf8')
+        .digest('hex');
+}
+
 module.exports = {
+
+    prepareUpdateSpec(txCtx, patchSpec) {
+
+        // calculate password digest if plain password is updated
+        switch (txCtx.call.entityContentType) {
+        case 'application/merge-patch+json':
+            if (typeof patchSpec.password === 'string') {
+                patchSpec.passwordDigest = digestPassword(patchSpec.password);
+                delete patchSpec.password;
+            }
+            break;
+        case 'application/json-patch+json':
+            txCtx.patchSpec = txCtx.patchSpec.map(op => (
+                op.op === 'replace' && op.path === '/password' &&
+                    typeof op.value === 'string'
+                    ? {
+                        op: 'replace',
+                        path: '/passwordDigest',
+                        value: digestPassword(op.value)
+                    }
+                    : op
+            ));
+        }
+    },
 
     beforeUpdate(txCtx, record) {
 

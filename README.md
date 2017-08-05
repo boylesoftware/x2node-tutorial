@@ -2,6 +2,8 @@
 
 This is a tutorial that shows how to develop a simple server-side application that provides a RESTful API to access data stored in a SQL database using _X2 Framework for Node.js_ (or simply _x2node_).
 
+The fully developed example project can be found in _/example_ folder.
+
 ## Table of Contents
 
 * [Introduction](#introduction)

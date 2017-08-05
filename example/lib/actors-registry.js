@@ -4,10 +4,10 @@ const dbos = require('x2node-dbos');
 
 class MyActorsRegistry {
 
-    constructor(pool, dboFactory) {
+    constructor(ds, dboFactory) {
 
         // save the database connections pool reference
-        this.pool = pool;
+        this.ds = ds;
 
         // build and save account fetch DBO
         this.accountFetch = dboFactory.buildFetch('Account', {
@@ -28,58 +28,41 @@ class MyActorsRegistry {
                 hasRole: () => true
             };
 
-        // lookup account record by email
-        return new Promise((resolve, reject) => {
+        // get database connection and lookup account record by email
+        let dbConnection;
+        return this.ds.getConnection(
 
-            // get database connection
-            this.pool.getConnection((err, con) => {
+        // execute account lookup DBO
+        ).then(con => this.accountFetch.execute(dbConnection = con, null, {
+            email: handle
 
-                // check if failed getting database connection
-                if (err)
-                    return reject(err);
+        // get matched account, if any, from the lookup result
+        })).then(result => (
+            result.records.length > 0 ? result.records[0] : null
 
-                // execute account lookup DBO on the connection
-                this.accountFetch.execute(con, null, {
-                    email: handle
+        // build and return actor object if account found
+        )).then(account => (
+            account ?
+                {
+                    id: account.id,
+                    stamp: account.email,
+                    hasRole: () => false
+                }
+                : null
 
-                }).then(
+        // release the database connection
+        )).then(
 
-                    // process DBO result
-                    result => {
+            // success
+            actor => (this.ds.releaseConnection(dbConnection), actor),
 
-                        // release database connection
-                        con.release();
-
-                        // check if matching account found
-                        if (result.records.length > 0) {
-
-                            // build and return actor object
-                            const account = result.records[0];
-                            resolve({
-                                id: account.id,
-                                stamp: account.email,
-                                hasRole: () => false
-                            });
-
-                        } else { // no matching account
-
-                            // no actor
-                            resolve(null);
-                        }
-                    },
-
-                    // DBO execution error
-                    err => {
-
-                        // release database connection
-                        con.release();
-
-                        // reject actor lookup with error
-                        reject(err);
-                    }
-                );
-            });
-        });
+            // error
+            err => (
+                dbConnection ?
+                    (this.ds.releaseConnection(dbConnection), Promise.reject(err))
+                    : Promise.reject(err)
+            )
+        );
     }
 }
 

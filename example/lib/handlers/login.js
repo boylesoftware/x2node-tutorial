@@ -7,12 +7,10 @@ const crypto = require('crypto');
 
 class LoginHandler {
 
-    constructor(pool, dboFactory) {
-
-        this.pool = pool;
+    constructor(ds, dboFactory) {
 
         // save the database connections pool reference
-        this.pool = pool;
+        this.ds = ds;
 
         // build and save account fetch DBO
         this.accountFetch = dboFactory.buildFetch('Account', {
@@ -58,59 +56,43 @@ class LoginHandler {
 
         // customer login:
 
-        // lookup account record by email and password digest
-        return new Promise((resolve, reject) => {
+        // get database connection and lookup account record by email and password digest
+        let dbConnection;
+        return this.ds.getConnection(
 
-            // get database connection
-            this.pool.getConnection((err, con) => {
+        // execute account lookup DBO on the connection
+        ).then(con => this.accountFetch.execute(dbConnection = con, null, {
+            email: loginInfo.username,
+            passwordDigest: crypto
+                .createHash('sha1')
+                .update(loginInfo.password, 'utf8')
+                .digest('hex')
 
-                // check if failed getting database connection
-                if (err)
-                    return reject(err);
+        // get matched account, if any, from the lookup result
+        })).then(result => (
+            result.records.length > 0 ? result.records[0] : null
 
-                // execute account lookup DBO on the connection
-                this.accountFetch.execute(con, null, {
-                    email: loginInfo.username,
-                    passwordDigest: crypto
-                        .createHash('sha1')
-                        .update(loginInfo.password, 'utf8')
-                        .digest('hex')
+        // build either login success or failure response
+        )).then(account => (
+            account ?
+                this.loginSuccessResponse(account)
+                : Promise.reject(ws.createResponse(400).setEntity({
+                    errorMessage: 'Invalid login.'
+                }))
 
-                }).then(
+        // release the database connection
+        )).then(
 
-                    // process DBO result
-                    result => {
+            // success
+            response => (this.ds.releaseConnection(dbConnection), response),
 
-                        // release database connection
-                        con.release();
-
-                        // check if matching account found
-                        if (result.records.length > 0) {
-
-                            // customer login successful
-                            resolve(this.loginSuccessResponse(result.records[0]));
-
-                        } else { // no matching account
-
-                            // invalid login
-                            reject(ws.createResponse(400).setEntity({
-                                errorMessage: 'Invalid login.'
-                            }));
-                        }
-                    },
-
-                    // DBO execution error
-                    err => {
-
-                        // release database connection
-                        con.release();
-
-                        // reject call with error
-                        reject(err);
-                    }
-                );
-            });
-        });
+            // error
+            err => (
+                dbConnection ?
+                    (this.ds.releaseConnection(dbConnection), Promise.reject(err))
+                    : Promise.reject(err)
+            )
+        );
     }
 
     loginSuccessResponse(account) {
@@ -141,4 +123,5 @@ class LoginHandler {
     }
 }
 
+// export the handler class
 module.exports = LoginHandler;

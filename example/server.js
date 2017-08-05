@@ -49,7 +49,7 @@ ws.createApplication()
     .addAuthenticator(
         '/.*',
         new JWTAuthenticator(
-            new (require('./lib/actors-registry.js'))(pool, dboFactory),
+            new (require('./lib/actors-registry.js'))(ds, dboFactory),
             new Buffer(process.env.SECRET, 'base64'), {
                 iss: 'x2tutorial',
                 aud: 'client'
@@ -80,7 +80,7 @@ ws.createApplication()
     // add login endpoint
     .addEndpoint(
         '/login',
-        new (require('./lib/handlers/login.js'))(pool, dboFactory))
+        new (require('./lib/handlers/login.js'))(ds, dboFactory))
 
     // add API endpoints
     .addEndpoint(

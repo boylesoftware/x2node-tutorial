@@ -17,6 +17,18 @@ The fully developed example project can be found in _/example_ folder.
   * [The Web Service](#the-web-service)
 * [Making Service Calls](#making-service-calls)
 * [Tightening the Screws](#tightening-the-screws)
+  * [Custom Validation](#custom-validation)
+  * [New Record Field Uniqueness](#new-record-field-uniqueness)
+  * [Updated Record Field Uniqueness](#updated-record-field-uniqueness)
+  * [Record Normalization](#record-normalization)
+  * [Referred Records Existence](#referred-records-existence)
+  * [Preventing Referred Records Deletion](#preventing-referred-records-deletion)
+  * [Backend Field Value Calculation](#backend-field-value-calculation)
+  * [Backend Operations](#backend-operations)
+  * [Disabling Certain Methods](#disabling-certain-methods)
+  * [Conditional Requests](#conditional-requests)
+  * [Authentication and Authorization](#authentication-and-authorization)
+  * [User Login](#user-login)
 
 ## Introduction
 
@@ -1559,6 +1571,287 @@ module.exports = {
 
 Now, if we send a `DELETE` request to `/order/{orderId}` end point we will get a nice [HTTP 405](https://tools.ietf.org/html/rfc7231#section-6.5.5) error.
 
+### Conditional Requests
+
+One of the most powerful features of _x2node_ is automatic support for [Conditional Requests](https://tools.ietf.org/html/rfc7232). The framework can automatically generate `ETag` and `Last-Modified` HTTP headers for you, which can dramatically improve your web-service performance.
+
+At the moment, if you send a `GET` request to our, say, product endpoint, you won't get either the `ETag` nor the `Last-Modified` headers in the response:
+
+```http
+GET /products/1 HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+
+HTTP/1.1 200 OK
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Content-Type: application/json
+Content-Length: 98
+Date: Fri, 04 Aug 2017 21:21:33 GMT
+Connection: keep-alive
+
+...
+```
+
+That makes conditional requests impossible. What we need to do is to add _record meta-information_ properties to our record types. The framework supports and automatically maintains five record meta-information property types:
+
+* Record version, which is used to calculate the resource `ETag`. The version is usually an integer number stored in its own column in the record type's main database table. Whenever the framework updates a record, it bumps up the version field (if the record type defines it).
+* Record creation timestamp, which is automatically assigned to a record when it is created and never changes. The property is not used for conditional requests, but sometimes is nice to have it stored in the database for audit.
+* Record creation actor, whch is the _stamp_ of the actor that created the record. Also never changes, not used for conditional requests and only serves for audit purposes.
+* Record last modification timestamp. This property is automatically maintained and is used to calculate the `Last-Modified` header.
+* Record last modification actor stamp, useful for audit.
+
+All, none of some of these meta-properties can be defined on a record type. The framework will use and maintain what's available. You can read about all of these meta-propertues in the [Record Meta-Info Properties](https://github.com/boylesoftware/x2node-dbos#record-meta-info-properties) section of the [x2node-dbos](https://github.com/boylesoftware/x2node-dbos) module manual. For our tutorial, let's use all of them.
+
+First, we need to add the columns to our tables in the database:
+
+```sql
+ALTER TABLE products
+    ADD COLUMN version INTEGER UNSIGNED NOT NULL,
+    ADD COLUMN created_on TIMESTAMP(3) DEFAULT 0,
+    ADD COLUMN created_by VARCHAR(60) NOT NULL,
+    ADD COLUMN modified_on TIMESTAMP(3) NULL,
+    ADD COLUMN modified_by VARCHAR(60);
+
+UPDATE products SET version = 1, created_on = CURRENT_TIMESTAMP, created_by = 'admin';
+
+ALTER TABLE accounts
+    ADD COLUMN version INTEGER UNSIGNED NOT NULL,
+    ADD COLUMN created_on TIMESTAMP(3) DEFAULT 0,
+    ADD COLUMN created_by VARCHAR(60) NOT NULL,
+    ADD COLUMN modified_on TIMESTAMP(3) NULL,
+    ADD COLUMN modified_by VARCHAR(60);
+
+UPDATE accounts SET version = 1, created_on = CURRENT_TIMESTAMP, created_by = 'admin';
+
+ALTER TABLE orders
+    ADD COLUMN version INTEGER UNSIGNED NOT NULL,
+    ADD COLUMN created_on TIMESTAMP(3) DEFAULT 0,
+    ADD COLUMN created_by VARCHAR(60) NOT NULL,
+    ADD COLUMN modified_on TIMESTAMP(3) NULL,
+    ADD COLUMN modified_by VARCHAR(60);
+
+UPDATE orders SET version = 1, created_on = CURRENT_TIMESTAMP, created_by = 'admin';
+```
+
+Now, let's add the meta-info properties to the record type definitions in our `record-type-defs.js`:
+
+```javascript
+...
+
+function withRecordProps(props) {
+
+    props['id'] = {
+        valueType: 'number',
+        role: 'id'
+    };
+    props['version'] = {
+        valueType: 'number',
+        role: 'version'
+    }
+    props['createdOn'] = {
+        valueType: 'datetime',
+        role: 'creationTimestamp',
+        column: 'created_on'
+    }
+    props['createdBy'] = {
+        valueType: 'string',
+        role: 'creationActor',
+        column: 'created_by'
+    }
+    props['modifiedOn'] = {
+        valueType: 'datetime',
+        role: 'modificationTimestamp',
+        optional: true,
+        column: 'modified_on'
+    }
+    props['modifiedBy'] = {
+        valueType: 'string',
+        role: 'modificationActor',
+        optional: true,
+        column: 'modified_by'
+    }
+
+    return props;
+}
+
+exports.recordTypes = {
+    'Product': {
+        table: 'products',
+        properties: withRecordProps({
+            // don't forget to remove id, it's in the withRecordProps now
+            ...
+        })
+    },
+    'Account': {
+        table: 'accounts',
+        properties: withRecordProps({
+            // remove the id
+            ...
+        })
+    },
+    'Order': {
+        table: 'orders',
+        properties: withRecordProps({
+            // remove the id
+            ...
+        })
+    }
+};
+```
+
+The code above shows another useful technique: when there are common properties for different record types, instead of copy-pasting their definitions you can extract them into a function (another technique for that is using inheritance&mdash;the records module understands prototype chains in the definitions).
+
+Now, if we query our product the result is going to be slightly different:
+
+```http
+GET /products/1 HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+
+HTTP/1.1 200 OK
+ETag: "dev-1501957208544:*:1"
+Last-Modified: Thu, 01 Jan 1970 00:00:00 GMT
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Content-Type: application/json
+Content-Length: 169
+Date: Sat, 05 Aug 2017 18:20:09 GMT
+Connection: keep-alive
+
+...
+```
+
+Note that we now have `ETag` and `Last-modified` headers in the response. So, a conditional request with `If-None-Match` request header is now possible:
+
+```http
+GET /products/1 HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+If-None-Match: "dev-1501957208544:*:1"
+
+HTTP/1.1 304 Not Modified
+ETag: "dev-1501957208544:*:1"
+Last-Modified: Thu, 01 Jan 1970 00:00:00 GMT
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Date: Sat, 05 Aug 2017 18:22:36 GMT
+Connection: keep-alive
+```
+
+And what we get is an [HTTP 304](https://tools.ietf.org/html/rfc7232#section-4.1) response. A browser that runs our client application will be automatically caching the responses and sending conditional requests when appropriate.
+
+A couple of words about the "anatomy" of the `ETag` header. It consists of three parts: the application version (because with an application update the response may change), the authenticated actor (because different actors may get different response), and the record version. The actor is "*" in our case, because the request was not authenticated. Otherwise, it would be the actor ID, about which you will see further in this tutorial.
+
+The application version part of the `ETag` value is interesting. When the application is running in the development mode (remember how we are starting our web-service with `NODE_ENV=development`?), the version is _dev-_ followed with the start timestamp. That way, each time the application is restarted in the development mode all cached `ETags` become invalidated, because the timestamp changes. In production mode, when `NODE_ENV=production`, the version is taken from the application's `package.json`. This logic can be overriden by the application by explicitely providing the application object with `apiVersion` configuration property. See [Application Configuration](https://github.com/boylesoftware/x2node-ws#application-configuration) section in the [x2node-ws](https://github.com/boylesoftware/x2node-ws) module documentation for more detail.
+
+So what we did so far made our individual resource endpoints support conditional HTTP requests. But what about our collection resource endpoints? They still do not return either `ETag` nor `Last-Modified`:
+
+```http
+GET /products HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+
+HTTP/1.1 200 OK
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Content-Type: application/json
+Content-Length: 461
+Date: Sat, 05 Aug 2017 18:34:32 GMT
+Connection: keep-alive
+
+...
+```
+
+To implement conditional requests for collection resource endpoints we need something that will be keeping track not of individual record versions but of the changes in the whole collection of records of the given type. In _x2node_ that something is called _record collections monitor_. The monitor implementation, once assigned to a DBO factory, gets notified by the DBOs when records of a given record type are created, updated or deleted giving it a chance to keep track of the _records collection version_. Then, the collection resource endpoint handlers can consult with the monitor and calculate version information for a given records search request.
+
+Different record collections monitor implementations may use different techniques where to keep the collection versioning information. In our tutorial we are going to use an implementation included in the framework as [x2node-dbos-monitor-dbtable](https://github.com/boylesoftware/x2node-dbos-monitor-dbtable) module. The module creates and maintaince a table called `x2rcinfo` in the database together with the main records tables. That way, all record collections version changes are kept transactional together with the record changes. Let's add it to our application. First, we need to add the module to our project:
+
+```shell
+$ npm install --save x2node-dbos-monitor-dbtable
+```
+
+Now, we need to assign it to our DBO factory in the `server.js`:
+
+```javascript
+
+// load framework modules
+...
+const rcMonitor = require('x2node-dbos-monitor-dbtable');
+
+...
+
+// create DBO factory for our record types library, MySQL flavor
+const dboFactory = ...
+
+// wrap the database connections pool with a generic interface for the framework
+const ds = ...
+
+// assign record collections monitor to the DBO factory
+rcMonitor.assignTo(dboFactory, ds);
+
+...
+```
+
+That's all! Now our collection search request will get `ETag` and `Last-Modified` headers in the response:
+
+```http
+GET /products HTTP/1.1
+Host: localhost:3001
+User-Agent: curl/7.54.1
+Accept: */*
+
+HTTP/1.1 200 OK
+ETag: "dev-1501958928576:*:0"
+Last-Modified: Thu, 01 Jan 1970 00:00:00 GMT
+Vary: Origin
+Cache-Control: no-cache
+Expires: 0
+Pragma: no-cache
+Content-Type: application/json
+Content-Length: 461
+Date: Sat, 05 Aug 2017 18:49:43 GMT
+Connection: keep-alive
+```
+
+There is one little problem that remains&mdash;if we try to create a new _Account_ now with an unauthenticated `POST` to `/accounts` endpoint, we are going to get a nasty internal server error with "Operation may not be anonymous." as an explanation. That is because our _Account_ record type has `createdBy` meta-info property, having which disallows creating records without an authenticated actor. To fix that, our handler must let the framework know that the `POST` is being made on behalf of the customer creating his or her own account. Let do that in our `accounts.js` handler:
+
+```javascript
+module.exports = {
+
+    ...
+
+    beforeCreate(txCtx, recordTmpl) {
+
+        // check no other account with same email exists
+        return txCtx.rejectIfExists(
+            ...
+
+        // if unauthenticated, assume the customer as the call actor
+        ).then(() => {
+            if (!txCtx.call.actor)
+                txCtx.call.actor = {
+                    stamp: recordTmpl.email
+                };
+        });
+    }
+};
+```
+
+We started talking about actors and authentication, so next let's see what's up with that.
+
 ### Authentication and Authorization
 
 You must have noticed that so far we did nothing about authenticating our users and checking their permissions. Let's fix it now.
@@ -2047,40 +2340,3 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4MnR1dG9yaWFsIiwiYXVkIjoiY
 ```
 
 That's all, folks! Happy backending!
-
-### Conditional Requests
-
-One of the most powerful features of _x2node_ is automatic support for [Conditional Requests](https://tools.ietf.org/html/rfc7232). The framework can automatically generate `ETag` and `Last-Modified` HTTP headers for you, which can dramatically improve your web-service performance.
-
-At the moment, if you send a `GET` request to our, say, product, you won't get the either the `ETag` nor the `Last-Modified` headers in the response:
-
-```http
-GET /products/1 HTTP/1.1
-Host: localhost:3001
-User-Agent: curl/7.54.1
-Accept: */*
-
-HTTP/1.1 200 OK
-Vary: Origin
-Cache-Control: no-cache
-Expires: 0
-Pragma: no-cache
-Content-Type: application/json
-Content-Length: 98
-Date: Fri, 04 Aug 2017 21:21:33 GMT
-Connection: keep-alive
-```
-
-That makes conditional requests impossible. What we need to do is to add `record meta-information` properties to our record types. The framework supports and automatically maintains five record meta-information property types:
-
-* Record version, which is used to calculate the resource `ETag`. The version is usually an integer number. Whenever the framework updates a record, it bumps up the version field (if the record type defines it).
-* Record creation timestamp. This is automatically assigned to a record when it is created and it never changes. The property is not used for conditional requests, but sometimes is nice to have stored in the database.
-* Record creation actor. This is the _stamp_ of the actor that created the record.
-* Record last modification timestamp. Automatically maintained timestamp used to calculate the `Last-Modified` header.
-* Record last modification actor.
-
-All, none of some of these meta-properties can be defined on a record type. The framework will use and maintain what's available. For our tutorial, let's use all of them.
-
-First, we need to add the columns to our tables in the database:
-
-TODO

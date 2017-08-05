@@ -16,6 +16,7 @@ const pool = require('mysql').createPool({
 // load framework modules
 const records = require('x2node-records');
 const dbos = require('x2node-dbos');
+const rcMonitor = require('x2node-dbos-monitor-dbtable');
 const ws = require('x2node-ws');
 const resources = require('x2node-ws-resources');
 const JWTAuthenticator = require('x2node-ws-auth-jwt');
@@ -29,6 +30,9 @@ const dboFactory = dbos.createDBOFactory(recordTypes, 'mysql');
 
 // wrap the database connections pool with a generic interface for the framework
 const ds = dboFactory.adaptDataSource(pool);
+
+// assign record collections monitor to the DBO factory
+rcMonitor.assignTo(dboFactory, ds);
 
 // create resource endpoint handlers factory and pass our DBO factory to it
 const handlers = resources.createResourceHandlersFactory(ds, dboFactory);

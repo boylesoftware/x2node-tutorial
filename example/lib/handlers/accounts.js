@@ -24,6 +24,13 @@ module.exports = {
                 [ 'email => eq', recordTmpl.email ]
             ],
             400, 'Another account with that E-mail exists.'
-        );
+
+        // if unauthenticated, assume the customer as the call actor
+        ).then(() => {
+            if (!txCtx.call.actor)
+                txCtx.call.actor = {
+                    stamp: recordTmpl.email
+                };
+        });
     }
 };

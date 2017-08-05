@@ -37,7 +37,7 @@ const orderTemplateDef = records.with(validators).buildLibrary({
 
 module.exports = {
 
-    prepareCreate(_, recordTmpl) {
+    prepareCreate(txCtx, recordTmpl) {
 
         // make sure we have payment information in the record template
         const errors = validators.normalizeRecord(

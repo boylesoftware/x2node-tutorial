@@ -16,14 +16,46 @@ exports.validatorDefs = {
     }
 };
 
+function withRecordProps(props) {
+
+    props['id'] = {
+        valueType: 'number',
+        role: 'id'
+    };
+    props['version'] = {
+        valueType: 'number',
+        role: 'version'
+    }
+    props['createdOn'] = {
+        valueType: 'datetime',
+        role: 'creationTimestamp',
+        column: 'created_on'
+    }
+    props['createdBy'] = {
+        valueType: 'string',
+        role: 'creationActor',
+        column: 'created_by'
+    }
+    props['modifiedOn'] = {
+        valueType: 'datetime',
+        role: 'modificationTimestamp',
+        optional: true,
+        column: 'modified_on'
+    }
+    props['modifiedBy'] = {
+        valueType: 'string',
+        role: 'modificationActor',
+        optional: true,
+        column: 'modified_by'
+    }
+
+    return props;
+}
+
 exports.recordTypes = {
     'Product': {
         table: 'products',
-        properties: {
-            'id': {
-                valueType: 'number',
-                role: 'id'
-            },
+        properties: withRecordProps({
             'name': {
                 valueType: 'string',
                 validators: [ ['maxLength', 50] ]
@@ -40,15 +72,11 @@ exports.recordTypes = {
                 valueType: 'boolean',
                 column: 'is_available'
             }
-        }
+        })
     },
     'Account': {
         table: 'accounts',
-        properties: {
-            'id': {
-                valueType: 'number',
-                role: 'id'
-            },
+        properties: withRecordProps({
             'email': {
                 valueType: 'string',
                 validators: [ ['maxLength', 60], 'email', 'lowercase' ]
@@ -68,15 +96,11 @@ exports.recordTypes = {
                 column: 'pwd_digest',
                 validators: [ ['pattern', /^[0-9a-f]{40}$/] ]
             }
-        }
+        })
     },
     'Order': {
         table: 'orders',
-        properties: {
-            'id': {
-                valueType: 'number',
-                role: 'id'
-            },
+        properties: withRecordProps({
             'accountRef': {
                 valueType: 'ref(Account)',
                 column: 'account_id',
@@ -128,6 +152,6 @@ exports.recordTypes = {
                     }
                 }
             }
-        }
+        })
     }
 };

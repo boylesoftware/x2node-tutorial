@@ -11,6 +11,7 @@ module.exports = {
 
     configure() {
 
+        // get rid of the DELETE method implementation
         this.DELETE = false;
     },
 
@@ -35,8 +36,19 @@ module.exports = {
             // execute payment backend action
             switch (record.status) {
             case 'SHIPPED':
+
+                // only and admin can make the order SHIPPED
+                if (!txCtx.call.actor.hasRole('admin'))
+                    return Promise.reject(ws.createResponse(403).setEntity({
+                        errorMessage: 'Insufficient permissions.'
+                    }));
+
+                // capture the payment transaction
                 return paymentsService.capturePayment(record.paymentTransactionId);
+
             case 'CANCELED':
+
+                // void the payment transaction
                 return paymentsService.voidPayment(record.paymentTransactionId);
             }
         }

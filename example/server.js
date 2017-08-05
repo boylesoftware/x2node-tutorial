@@ -18,6 +18,10 @@ const records = require('x2node-records');
 const dbos = require('x2node-dbos');
 const ws = require('x2node-ws');
 const resources = require('x2node-ws-resources');
+const JWTAuthenticator = require('x2node-ws-auth-jwt');
+
+// load application actors registry implementation
+const MyActorsRegistry = require('./lib/actors-registry.js');
 
 // build record types library (don't forget the DBOs extension)
 const recordTypes = records.with(dbos).buildLibrary(
@@ -39,6 +43,38 @@ ws.createApplication()
     .on('shutdown', () => {
         pool.end();
     })
+
+    // add authenticator
+    .addAuthenticator(
+        '/.*',
+        new JWTAuthenticator(
+            new MyActorsRegistry(pool, dboFactory),
+            new Buffer(process.env.SECRET, 'base64'), {
+                iss: 'x2tutorial',
+                aud: 'client'
+            }
+        ))
+
+    // protect the endpoints with authorizers
+    .addAuthorizer(
+        '/products.*',
+        call => (
+            call.method === 'GET' ||
+                (call.actor && call.actor.hasRole('admin'))))
+    .addAuthorizer(
+        '/accounts',
+        call => (
+            call.method === 'POST' ||
+                (call.actor && call.actor.hasRole('admin'))))
+    .addAuthorizer(
+        '/accounts/.*',
+        call => (
+            call.actor && (
+                call.actor.hasRole('admin') || call.actor.id === Number(call.uriParams[0])))
+    )
+    .addAuthorizer(
+        '/orders.*',
+        call => (call.actor && call.actor.hasRole('admin')))
 
     // add API endpoints
     .addEndpoint(

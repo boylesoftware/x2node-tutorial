@@ -1245,6 +1245,12 @@ There is a couple of points about this code that are worth mentioning:
 
 Otherwise, it's pretty straightforward.
 
+Since our application now uses [x2node-common](https://github.com/boylesoftware/x2node-common) module directly, we need to add it to the project:
+
+```shell
+$ npm install --save x2node-common
+```
+
 Now, let's look at our _Order_ record type definition, in particular at the `status` and `paymentTransactionId` fields:
 
 ```javascript
@@ -1304,7 +1310,15 @@ exports.recordTypes = {
 };
 ```
 
-And now, onto our handlers! First of all, let's add new logic to the `orders.js` handler for when a new order is submitted. There are couple of things we need to do. First, we must require valid payment information in the order template. We could just write the logic for checking if the payment information is missing or is invalid right in the `prepareCreate` hook, but wouldn't it be nice to define the fields the same way we defined our persistent fields in the record type definition? That way we would be able to use the validators. The problem is that we can't add those fields directly into our _Order_ record type definition, because those fields are not persistent and are only used with the new order record template. What we can do instead is to define another tiny, local record types "library" that will include the additional fields and that way we will be able to call the validators in the hook. So, let's add it to our `orders.js`:
+And now, onto our handlers! First of all, let's add new logic to the `orders.js` handler for when a new order is submitted. There are couple of things we need to do. First, we must require valid payment information in the order template. We could just write the logic for checking if the payment information is missing or is invalid right in the `prepareCreate` hook, but wouldn't it be nice to define the fields the same way we defined our persistent fields in the record type definition? That way we would be able to use the validators. The problem is that we can't add those fields directly into our _Order_ record type definition, because those fields are not persistent and are only used with the new order record template. What we can do instead is to define another tiny, local record types "library" that will include the additional fields and that way we will be able to call the validators in the hook.
+
+First, we need to add the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module to our project since we are going to be using it directly:
+
+```shell
+$ npm install --save x2node-validators
+```
+
+And now let's add the logic to our `orders.js`:
 
 ```javascript
 ...
@@ -1506,8 +1520,13 @@ module.exports = {
             // execute payment backend action
             switch (record.status) {
             case 'SHIPPED':
+
+                // capture the payment transaction
                 return paymentsService.capturePayment(record.paymentTransactionId);
+
             case 'CANCELED':
+
+                // void the payment transaction
                 return paymentsService.voidPayment(record.paymentTransactionId);
             }
         }
@@ -1526,6 +1545,7 @@ module.exports = {
 
     configure() {
 
+        // get rid of the DELETE method implementation
         this.DELETE = false;
     },
 
@@ -1534,6 +1554,284 @@ module.exports = {
 ```
 
 Now, if we send a `DELETE` request to `/order/{orderId}` end point we will get a nice [HTTP 405](https://tools.ietf.org/html/rfc7231#section-6.5.5) error.
+
+### Authentication and Authorization
+
+You must have noticed that so far we did nothing about authenticating our users and checking their permissions. Let's fix it now.
+
+There are two ways how an endpoint can be protected:
+
+* The endpoint handler can implement `isAllowed()` method. The method is called before any call processing logic is invoked and is passed a [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) object. If the method returns `false`, the call is prohibited.
+
+* An [Authorizer](https://github.com/boylesoftware/x2node-ws#authorizers) can be registered on the application to cover all endpoints matching certain URI pattern. Multiple authorizers can match a single URI and they all are combined (plus the handler's `isAllowed()` method, if any).
+
+Let's have a look at our endpoints one by one and decide how we are going to protect each one of them.
+
+The `/products` and `/products/{productId}` endpoints are very straightforward: `GET` is allowed to anybody and all other methods require an admin. This can be easily done in an authorizer in our `server.js`:
+
+```javascript
+ws.createApplication()
+
+    ...
+
+    // protect the endpoints with authorizers
+    .addAuthorizer(
+        '/products.*',
+        call => (
+            call.method === 'GET' ||
+                (call.actor && call.actor.hasRole('admin'))))
+
+    // add API endpoints
+    ...
+```
+
+The `call.actor` condition makes sure that the call is authenticated (not anonymous) and `call.actor.hasRole('admin')` makes sure that the authenticated actor is an admin.
+
+Another straightforward endpoints pair is `/orders` and `/orders/{orderId}`. These two simply require an admin for everything. So:
+
+```javascript
+ws.createApplication()
+
+    ...
+
+    .addAuthorizer(
+        '/orders.*',
+        call => (call.actor && call.actor.hasRole('admin')))
+
+    ...
+```
+
+But the `/accounts` endpoint and all of its sub-resource endpoints are a bit more complicated. Here are our authorizers:
+
+```javascript
+ws.createApplication()
+
+    ...
+
+    .addAuthorizer(
+        '/accounts',
+        call => (
+            call.method === 'POST' ||
+                (call.actor && call.actor.hasRole('admin'))))
+    .addAuthorizer(
+        '/accounts/.*',
+        call => (
+            call.actor && (
+                call.actor.hasRole('admin') || call.actor.id === Number(call.uriParams[0])))
+    )
+
+    ...
+```
+
+We allow anyone to `POST` to our `Account` collection resource endpoint and `GET` (search accounts) only to an admin. Then, the individual account resource endpoint allows to do anything to either an admin or the account owner (the authenticated actor ID is the same as the one in the URI). This also convenienty covers the `/accounts/{accountId}/orders` endpoints and explains why we wanted to have them in the first place.
+
+There is only one tiny issue that remains to be addressed&mdash;only an admin can update an order and make it _SHIPPED_. That addition goes into our `beforeUpdateSave` hook in the `order.js` handler:
+
+```javascript
+module.exports = {
+
+    ...
+
+    beforeUpdateSave(txCtx, record) {
+
+        // check if status changed and perform corresponding actions
+        const originalStatus = txCtx[ORIGINAL_STATUS];
+        if (record.status !== originalStatus) {
+
+            ...
+
+            // execute payment backend action
+            switch (record.status) {
+            case 'SHIPPED':
+
+                // only and admin can make the order SHIPPED
+                if (!txCtx.call.actor.hasRole('admin'))
+                    return Promise.reject(ws.createResponse(403).setEntity({
+                        errorMessage: 'Insufficient permissions.'
+                    }));
+
+                // capture the payment transaction
+                return paymentsService.capturePayment(record.paymentTransactionId);
+
+                ...
+            }
+        }
+    }
+};
+```
+
+So that covers the authorization part. But what about the authentication? The [x2node-ws](https://github.com/boylesoftware/x2node-ws) module uses [Authenticators](https://github.com/boylesoftware/x2node-ws#authenticators) for that. And authenticator is associated with a certain URI pattern and extracts an _actor handle_ from the HTTP request. The actor handle is then used to lookup the actor in the user database called _actors registry_. The actors registry is a component provided by the application. It can lookup the actor by the handle, verify the actor's credentials if utilized by the authentication scheme, determine the actor's roles in the context of the application. In _x2node_ the authenticator is decoupled from the actors registry. The only responsibility of the authenticator is to extract the actor handle and possibly the credentials from the request and pass them to the actors registry.
+
+So, first, let's create our actors registry in `lib/actors-registry.js` in our project:
+
+```javascript
+'use strict';
+
+const dbos = require('x2node-dbos');
+
+class MyActorsRegistry {
+
+    constructor(pool, dboFactory) {
+
+        // save the database connections pool reference
+        this.pool = pool;
+
+        // build and save account fetch DBO
+        this.accountFetch = dboFactory.buildFetch('Account', {
+            props: [ 'id', 'email' ],
+            filter: [
+                [ 'email => is', dbos.param('email') ]
+            ]
+        });
+    }
+
+    lookupActor(handle) {
+
+        // admin is a special case
+        if (handle === 'admin')
+            return {
+                id: 0,
+                stamp: 'admin',
+                hasRole: () => true
+            };
+
+        // lookup account record by email
+        return new Promise((resolve, reject) => {
+
+            // get database connection
+            this.pool.getConnection((err, con) => {
+
+                // check if failed getting database connection
+                if (err)
+                    return reject(err);
+
+                // execute account lookup DBO on the connection
+                this.accountFetch.execute(con, null, {
+                    email: handle
+
+                }).then(
+
+                    // process DBO result
+                    result => {
+
+                        // release database connection
+                        con.release();
+
+                        // check if matching account found
+                        if (result.records.length > 0) {
+
+                            // build and return actor object
+                            const account = result.records[0];
+                            resolve({
+                                id: account.id,
+                                stamp: account.email,
+                                hasRole: () => false
+                            });
+
+                        } else { // no matching account
+
+                            // no actor
+                            resolve(null);
+                        }
+                    },
+
+                    // DBO execution error
+                    err => {
+
+                        // release database connection
+                        con.release();
+
+                        // reject actor lookup with error
+                        reject(err);
+                    }
+                );
+            });
+        });
+    }
+}
+
+// export the registry class
+module.exports = MyActorsRegistry;
+```
+
+Several points about our actors registry implementation:
+
+* Admin user is special. We reserve "admin" actor handle for it.
+
+* The rest of the actors are customers. We use email address to lookup matching _Account_ records. For that, our registry constructor recieves the database connections pool and the DBO factory, which it uses to construct a _fetch DBO_ for perform the _Account_ record lookups. So far, this is the only place in our application where we use the [x2node-dbos](https://github.com/boylesoftware/x2node-dbos) module directly.
+
+* The actor objects returned by the registry have three elements:
+
+  * The `id` property, which is the actor id. In our application it is the same value as the _Account_ record id. Remember how we use the authenticated actor ID to match with the account ID in the call URI to protect all `/account/{accountId}` endpoints? This is where it comes from.
+  * The `stamp` property, which is used to identify the actor in such places as audit logs. For that reason it needs to be something that uniquely identifies the actor, is relatively short and more-or-less human readable. Our application uses the `email` value of the _Account_ record for that purpose.
+  * And finally the `hasRole()` method, which tells if the actor has the role passed to it as an argument. Since in our case we have only one role, that is the "admin", we simply return `true` or `false` based on whether the actor is an admin or a customer.
+
+* If no matching actor is found in the registry, it is not an error. It simply reports that no matching actor exists by returning a `null` (or a promise of it, as in our case). The authenticator then will treat the call as unauthenticated. If the promise is rejected, the situation is treated as an unexpected exception, which most likely will lead to an [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) response.
+
+Now we are ready to add an authenticator to our application. Many modern web-services use _JWT_ (see [RFC 7519](https://tools.ietf.org/html/rfc7519)) with _Bearer_ HTTP authentication scheme associated with _OAuth 2.0_ (see [RFC 6750](https://tools.ietf.org/html/rfc6750)). Let's use it for our application too, which is especially convenient since _x2node_ includes a JWT-based authenticator implementation in its [x2node-ws-auth-jwt](https://github.com/boylesoftware/x2node-ws-auth-jwt) module.
+
+First, let's add the JWS authenticator module to our project:
+
+```shell
+$ npm install --save x2node-ws-auth-jwt
+```
+
+Now we can add it in our `server.js`:
+
+```javascript
+...
+
+// load framework modules
+...
+const JWTAuthenticator = require('x2node-ws-auth-jwt');
+
+// load application actors registry implementation
+const MyActorsRegistry = require('./lib/actors-registry.js');
+
+...
+
+// assemble and run the web-service
+ws.createApplication()
+
+    ...
+
+    // add authenticator
+    .addAuthenticator(
+        '/.*',
+        new JWTAuthenticator(
+            new MyActorsRegistry(pool, dboFactory),
+            new Buffer(process.env.SECRET, 'base64'), {
+                iss: 'x2tutorial',
+                aud: 'client'
+            }
+        ))
+
+    ...
+```
+
+Our authenticator uses a new environment variable `SECRET`, which is the secret key for our access token signatures in BASE64 encoding. You can generate the key, for example, with OpenSSL:
+
+```shell
+$ openssl rand -base64 32
+hKiY0xP600FHbgQS2y14F7ckqbfai99AZwF6hYvW0lM=
+```
+
+and then add it to our `.env` file:
+
+```shell
+...
+
+#
+# Secret key.
+#
+SECRET=hKiY0xP600FHbgQS2y14F7ckqbfai99AZwF6hYvW0lM=
+```
+
+That's it, we are fully secured! One little problem remains&mdash;where do we get the JWT tokens to send to our API endpoints in the `Authorization` HTTP request header? And about that is in the next section.
+
+### User Login
+
+TODO
 
 ### Conditional Requests
 
@@ -1558,12 +1856,16 @@ Date: Fri, 04 Aug 2017 21:21:33 GMT
 Connection: keep-alive
 ```
 
-TODO
+That makes conditional requests impossible. What we need to do is to add `record meta-information` properties to our record types. The framework supports and automatically maintains five record meta-information property types:
 
-### Authentication and Authorization
+* Record version, which is used to calculate the resource `ETag`. The version is usually an integer number. Whenever the framework updates a record, it bumps up the version field (if the record type defines it).
+* Record creation timestamp. This is automatically assigned to a record when it is created and it never changes. The property is not used for conditional requests, but sometimes is nice to have stored in the database.
+* Record creation actor. This is the _stamp_ of the actor that created the record.
+* Record last modification timestamp. Automatically maintained timestamp used to calculate the `Last-Modified` header.
+* Record last modification actor.
 
-TODO
+All, none of some of these meta-properties can be defined on a record type. The framework will use and maintain what's available. For our tutorial, let's use all of them.
 
-### User Login
+First, we need to add the columns to our tables in the database:
 
 TODO

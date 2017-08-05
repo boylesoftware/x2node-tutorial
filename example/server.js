@@ -20,9 +20,6 @@ const ws = require('x2node-ws');
 const resources = require('x2node-ws-resources');
 const JWTAuthenticator = require('x2node-ws-auth-jwt');
 
-// load application actors registry implementation
-const MyActorsRegistry = require('./lib/actors-registry.js');
-
 // build record types library (don't forget the DBOs extension)
 const recordTypes = records.with(dbos).buildLibrary(
     require('./lib/record-type-defs.js'));
@@ -48,7 +45,7 @@ ws.createApplication()
     .addAuthenticator(
         '/.*',
         new JWTAuthenticator(
-            new MyActorsRegistry(pool, dboFactory),
+            new (require('./lib/actors-registry.js'))(pool, dboFactory),
             new Buffer(process.env.SECRET, 'base64'), {
                 iss: 'x2tutorial',
                 aud: 'client'
@@ -75,6 +72,11 @@ ws.createApplication()
     .addAuthorizer(
         '/orders.*',
         call => (call.actor && call.actor.hasRole('admin')))
+
+    // add login endpoint
+    .addEndpoint(
+        '/login',
+        new (require('./lib/handlers/login.js'))(pool, dboFactory))
 
     // add API endpoints
     .addEndpoint(

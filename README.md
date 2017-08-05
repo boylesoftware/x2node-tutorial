@@ -91,9 +91,9 @@ We will also need a special, non-resource endpoint to allow our users to login:
 
 | URI      | Method | Description
 | -------- | ------ | -----------
-| _/login_ | `POST` | Authenticate a user, which may be the store admin or a customer. The username and the password will be provided as the request parameters. The response will include an authentication token that can be used with subsequent API calls.
+| _/login_ | `POST` | Authenticate a user, which may be the store admin or a customer. The username and the password will be provided in a JSON object in the request body. The response will include an authentication token that can be used with subsequent API calls.
 
-Not every web-service handles initial user authentication (the user login) itself. These days standards like _OAuth2.0_ allow delegation of the authentication token issuing to a thrid-party. The web-service then merely verifies the authentication tokens it receives with the calls and matches them against its own user database. For the purpose of our tutorial, however, we are going to the our web-service handle user logins on its own.
+Not every web-service handles initial user authentication (the user login) itself. These days standards like _OAuth 2.0_ allow delegation of the authentication token issuing to a thrid-party. The web-service then merely verifies the authentication tokens it receives with the calls and matches them against its own user database. For the purpose of our tutorial, however, we are going to the our web-service handle user logins on its own.
 
 ## The Database
 
@@ -535,6 +535,8 @@ $ curl -v http://localhost:3001/products | python -mjson.tool
 Or use our simple API tester in a browser at [http://x2node.com/api-tester/](http://x2node.com/api-tester/):
 
 ![API Tester Screenshot](/api-tester-screen.png)
+
+*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop running application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
 
 So, let's make some API calls now. In the call examples below we are going to use `curl`, but it may be more convenient with the API tester&mdash;whichever is your preference.
 
@@ -1787,9 +1789,6 @@ Now we can add it in our `server.js`:
 ...
 const JWTAuthenticator = require('x2node-ws-auth-jwt');
 
-// load application actors registry implementation
-const MyActorsRegistry = require('./lib/actors-registry.js');
-
 ...
 
 // assemble and run the web-service
@@ -1801,7 +1800,7 @@ ws.createApplication()
     .addAuthenticator(
         '/.*',
         new JWTAuthenticator(
-            new MyActorsRegistry(pool, dboFactory),
+            new (require('./lib/actors-registry.js'))(pool, dboFactory),
             new Buffer(process.env.SECRET, 'base64'), {
                 iss: 'x2tutorial',
                 aud: 'client'
@@ -1833,7 +1832,221 @@ That's it, we are fully secured! One little problem remains&mdash;where do we ge
 
 ### User Login
 
-TODO
+There is one endpoint that remains not implementation, the `/login` endpoint. This endpoint is not a resource matching a persistent record type, so we are not going to use our resource endpoint handlers factory provided by the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module. Instead, we are going to write a handler used directly by the low-level [x2node-ws](https://github.com/boylesoftware/x2node-ws) module. But first, let add to the project what we are going to need to implement user login logic based on JWTs.
+
+Our admin user does not have an account in the database, so let's have a hardcoded login name "admin" used for it and have the password in the application runtime environment. So, add something like the following to the `.env` file:
+
+```shell
+...
+
+#
+# Admin password.
+#
+ADMIN_PASSWORD=DontTellAnybody
+```
+
+When a login is successful, we are going to need to create and sign a JWT. Let add a 3rd-party module to our project that we are going to use for that purpose:
+
+```shell
+$ npm install --save jws
+```
+
+Now we've got everything we need to write our login endpoint handler in `lib/handlers/login.js`:
+
+```javascript
+'use strict';
+
+const ws = require('x2node-ws');
+const dbos = require('x2node-dbos');
+const jws = require('jws');
+const crypto = require('crypto');
+
+class LoginHandler {
+
+    constructor(pool, dboFactory) {
+
+        this.pool = pool;
+
+        // save the database connections pool reference
+        this.pool = pool;
+
+        // build and save account fetch DBO
+        this.accountFetch = dboFactory.buildFetch('Account', {
+            props: [ 'id', 'email', 'firstName', 'lastName' ],
+            filter: [
+                [ 'email => is', dbos.param('email') ],
+                [ 'passwordDigest => is', dbos.param('passwordDigest') ]
+            ]
+        });
+
+        // save secret key for token signatures
+        this.secret = new Buffer(process.env.SECRET, 'base64');
+
+        // save admin password
+        this.adminPassword = process.env.ADMIN_PASSWORD;
+    }
+
+    POST(call) {
+
+        // get and validate login information
+        const loginInfo = call.entity;
+        if (!loginInfo || typeof loginInfo.username !== 'string' ||
+            typeof loginInfo.password !== 'string')
+            return ws.createResponse(400).setEntity({
+                errorMessage: 'Missing or invalid login information.'
+            });
+
+        // check if admin login
+        if (loginInfo.username === 'admin') {
+
+            // check if password matches
+            if (loginInfo.password !== this.adminPassword)
+                return ws.createResponse(400).setEntity({
+                    errorMessage: 'Invalid login.'
+                });
+
+            // admin login successful
+            return this.loginSuccessResponse({
+                id: 0,
+                email: 'admin'
+            });
+        }
+
+        // customer login:
+
+        // lookup account record by email and password digest
+        return new Promise((resolve, reject) => {
+
+            // get database connection
+            this.pool.getConnection((err, con) => {
+
+                // check if failed getting database connection
+                if (err)
+                    return reject(err);
+
+                // execute account lookup DBO on the connection
+                this.accountFetch.execute(con, null, {
+                    email: loginInfo.username,
+                    passwordDigest: crypto
+                        .createHash('sha1')
+                        .update(loginInfo.password, 'utf8')
+                        .digest('hex')
+
+                }).then(
+
+                    // process DBO result
+                    result => {
+
+                        // release database connection
+                        con.release();
+
+                        // check if matching account found
+                        if (result.records.length > 0) {
+
+                            // customer login successful
+                            resolve(this.loginSuccessResponse(result.records[0]));
+
+                        } else { // no matching account
+
+                            // invalid login
+                            reject(ws.createResponse(400).setEntity({
+                                errorMessage: 'Invalid login.'
+                            }));
+                        }
+                    },
+
+                    // DBO execution error
+                    err => {
+
+                        // release database connection
+                        con.release();
+
+                        // reject call with error
+                        reject(err);
+                    }
+                );
+            });
+        });
+    }
+
+    loginSuccessResponse(account) {
+
+        // build and sign the JWT
+        const now = Date.now() / 1000;
+        const idToken = jws.sign({
+            header: {
+                alg: 'HS256'
+            },
+            payload:{
+                iss: 'x2tutorial',
+                aud: 'client',
+                sub: account.email,
+                iat: now,
+                exp: now + 3600 // expire after an hour
+            },
+            secret: this.secret
+        });
+
+        // return successful login response
+        return ws.createResponse(200).setEntity({
+            sub: account.email,
+            firstName: account.firstName,
+            lastName: account.lastName,
+            id_token: idToken
+        });
+    }
+}
+
+module.exports = LoginHandler;
+```
+
+Naturally, there are some similarities in the handler's logic with our actors registry implementation.
+
+Now we can add it to our `server.js`:
+
+```javascript
+...
+
+// assemble and run the web-service
+ws.createApplication()
+
+    ...
+
+    // add login endpoint
+    .addEndpoint(
+        '/login',
+        new (require('./lib/handlers/login.js'))(pool, dboFactory))
+
+    ...
+```
+
+Now we can login! Send a `POST` with the following body to the `/login` endpoint:
+
+```json
+{
+  "username": "admin",
+  "password": "DontTellAnybody"
+}
+```
+
+The response you are going to get will look something like the following:
+
+```json
+{
+  "sub": "admin",
+  "id_token": "eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4MnR1dG9yaWFsIiwiYXVkIjoiY2xpZW50Iiwic3ViIjoiYWRtaW4iLCJpYXQiOjE1MDE5NDk0NDIuNzk2LCJleHAiOjE1MDE5NTMwNDIuNzk2fQ.1KI6e90pu3w6bGNPW_wUlFWoj0bCijBmDE1QnopgNQA"
+}
+```
+
+Now, whenever we make a call to our API, we can add the `Authorization` HTTP header with the value of the `id_token`:
+
+```http
+...
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJ4MnR1dG9yaWFsIiwiYXVkIjoiY2xpZW50Iiwic3ViIjoiYWRtaW4iLCJpYXQiOjE1MDE5NDk0NDIuNzk2LCJleHAiOjE1MDE5NTMwNDIuNzk2fQ.1KI6e90pu3w6bGNPW_wUlFWoj0bCijBmDE1QnopgNQA
+...
+```
+
+That's all, folks! Happy backending!
 
 ### Conditional Requests
 

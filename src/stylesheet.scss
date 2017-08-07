@@ -40,6 +40,10 @@ a {
 
 p {
 	line-height: 22px;
+	margin: 16px 0px;
+}
+li > p {
+	margin: 0px;
 }
 
 img {

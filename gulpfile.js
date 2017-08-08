@@ -31,8 +31,6 @@ gulp.task('markdown', () => gulp.src('src/TUTORIAL.md')
 
 gulp.task('build', [ 'markdown', 'css', 'img' ]);
 
-gulp.task('default', [ 'build' ]);
-
 gulp.task('watch', [ 'build' ], () => {
 
 	console.log('watching for source changes...');
@@ -47,3 +45,16 @@ gulp.task('watch', [ 'build' ], () => {
 	watch('src/stylesheet.scss', [ 'css' ]);
 	watch('src/img/**/*', [ 'img' ]);
 });
+
+gulp.task('serve', [ 'watch' ], () => {
+
+	const server = plugins.liveServer.static(
+		'dist', Number(process.env['HTTP_PORT']) || 8080);
+	server.start();
+
+	gulp.watch('dist/**/*', { debounceDelay: 1000 }, event => {
+		server.notify(event);
+	});
+});
+
+gulp.task('default', [ 'build' ]);

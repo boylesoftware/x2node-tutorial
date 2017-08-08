@@ -1,9 +1,12 @@
-$content-width: 980px;
+$content-width: 920px;
 $content-padding: 45px;
 $header-height: 80px;
 $link-color: #ec811d;
 $title-color: #777777;
+$toc-width: 300px;
+$toc-overlap: 20px;
 $toc-background-color: whitesmoke;
+$regular-font-size: 15px;
 
 html, body {
 	margin: 0px;
@@ -13,25 +16,30 @@ html, body {
 body {
 	background-color: silver;
 	font-family: "Roboto", sans-serif;
+	font-size: $regular-font-size;
+	line-height: 22px;
 }
 
 h1, h2, h3 {
 	font-family: "Roboto Slab", serif;
 	color: $title-color;
+	line-height: normal;
 }
 h1 {
 	margin: 0px 0px 40px 0px;
 	text-align: center;
 }
 h2 {
-	margin: 50px 0px 20px 0px;
+	margin: 40px 0px 20px 0px;
 	padding-bottom: 3px;
 	border-bottom: 3px double silver;
+	font-size: 26px;
 }
 h3 {
-	margin: 30px 0px 20px 0px;
+	margin: 25px 0px 20px 0px;
 	padding-bottom: 3px;
 	border-bottom: 1px solid silver;
+	font-size: 22px;
 }
 
 a {
@@ -39,7 +47,6 @@ a {
 }
 
 p {
-	line-height: 22px;
 	margin: 16px 0px;
 }
 li > p {
@@ -65,6 +72,7 @@ pre {
 	overflow: auto;
 	padding: 10px 5px;
 	background-color: #333333;
+	line-height: normal;
 
 	> code {
 		background-color: transparent;
@@ -111,6 +119,7 @@ body > header {
 	background-color: white;
 	box-shadow: 0px 0px 7px rgba(0,0,0,0.5);
 	z-index: 20;
+	line-height: normal;
 
 	h1 {
 		position: absolute;
@@ -130,7 +139,7 @@ body > header {
 
 	> nav {
 		font-family: "Oswald", sans-serif;
-		font-size: 22px;
+		font-size: 20px;
 		color: $title-color;
 
 		> ul {
@@ -167,6 +176,7 @@ body > header {
 						border: 1px solid darkgrey;
 						border-radius: 0px 0px 5px 5px;
 						font-family: "Roboto Condensed", sans-serif;
+						font-size: $regular-font-size;
 						box-shadow: 0px 0px 7px rgba(0,0,0,0.4);
 
 						> li {
@@ -210,7 +220,7 @@ body > header {
 }
 
 #content-container {
-	width: 1260px;
+	width: 1190px;
 	margin: $header-height auto 0px auto;
 }
 
@@ -218,7 +228,7 @@ body > header {
 	box-sizing: border-box;
 	width: $content-width;
 	overflow: hidden;
-	margin: 0px 0px 0px 300px;
+	margin: 0px 0px 0px $toc-width - $toc-overlap;
 	padding: $content-padding $content-padding;
 	background-color: white;
 	box-shadow: 0px 0px 4px rgba(0,0,0,0.4);
@@ -242,24 +252,26 @@ body > header {
 
 #table-of-contents {
 	position: fixed;
-	top: 80px;
+	top: $header-height;
 	left: 0px;
-	width: 289px;
+	width: $toc-width - 20px - 20px - 1px;
 	z-index: 30;
 	margin: 0px;
 	padding: 18px 20px 0px 20px;
 	border: 0px none;
 	border-top: 1px solid lightgrey;
 	background-color: $toc-background-color;
+	line-height: normal;
+	font-size: 20px;
 
 	+ ul {
 		box-sizing: border-box;
 		position: fixed;
-		top: 80px;
+		top: $header-height;
 		left: 0px;
-		width: 330px;
+		width: $toc-width;
 		margin: 0px;
-		padding: 60px 20px 20px 20px;
+		padding: 50px 20px 20px 20px;
 		list-style: none;
 		background-color: $toc-background-color;
 		border-right: 1px solid darkgray;
@@ -267,6 +279,8 @@ body > header {
 		border-radius: 0px 0px 5px 0px;
 		box-shadow: 0px 0px 7px rgba(0,0,0,0.5);
 		font-family: "Roboto Condensed", sans-serif;
+		font-size: 14px;
+		line-height: normal;
 
 		a {
 			text-decoration: none;
@@ -276,8 +290,12 @@ body > header {
 			}
 		}
 
+		li {
+			padding: 2px;
+		}
+
 		> li {
-			padding-top: 10px;
+			padding-top: 8px;
 
 			> ul {
 				list-style: disc;

@@ -160,7 +160,7 @@ So, go ahead, fire up your _MariaDB_, create a database, create a database user 
 $ mysql -uroot -p
 ...
 
-MariaDB [(none)]> create database x2tutotial character set 'utf8';
+MariaDB [(none)]> create database x2tutorial character set 'utf8';
 Query OK, 1 row affected (0.00 sec)
 
 MariaDB [(none)]> grant all on x2tutorial.* to 'x2tutorial'@'localhost' identified by 'x2tutorial';

@@ -700,11 +700,11 @@ Along with the `records` list, in the response we are going to see `referredReco
 
 ## Tightening the Screws
 
-It's nice that we have a what appears to be fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let go over them one by one and fix them.
+It's nice that we have a what appears to be a fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let's go over them one by one and fix them.
 
-But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. The description of all the different hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take a second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifying it. A description for all the available hooks, can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
 
-We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
+We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. For example, in `server.js` we are going to have:
 
 ```javascript
 // assemble and run the web-service
@@ -749,7 +749,7 @@ ws.createApplication()
     ...
 ```
 
-For now, you can create empty handler extensions and we will be filling them in as we progress in our tutorial. An empty extension, for example at `lib/handlers/products.js`, can be:
+For now, you can create empty handler extensions and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
 
 ```javascript
 'use strict';

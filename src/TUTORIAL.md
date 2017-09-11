@@ -919,6 +919,7 @@ Another problem related to field uniqueness is that our database does not allow 
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#1",

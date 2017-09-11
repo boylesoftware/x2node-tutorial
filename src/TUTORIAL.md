@@ -843,14 +843,14 @@ Restart the web-service and try to `POST` the `new-account.json` template to the
 
 The `txCtx` argument passed into the hook is the _transaction context_, which is an object made available to all hooks and presents the framework's API to the hook implementation. Among other things, the transaction context exposes a number of convenience functions, such as the `rejectIfExists()` function used in our example above. The function takes the following four arguments:
 
-* Name of the record type to query in the database.
-* Record filter specification (read on to see more about it).
-* HTTP status code for the error response if the condition is triggered.
-* Error message to include in the error response if the condition is triggered.
+1. Name of the record type to query in the database.
+2. Record filter specification (read on to see more about it).
+3. HTTP status code for the error response if the condition is triggered.
+4. Error message to include in the error response if the condition is triggered.
 
-If the condition is triggered (in our case&mdash;matching _Account_ records exist), the function returns a `Promise` rejected with an error web-service response. Otherwise, it returns nothing. In general for the hooks, if a hook returns nothing, the API call processing logic continues. If it returns a rejected `Promise`, the call processing logic is aborted, the database transaction is rolled back and the rejection reason is returned to the API client.
+If the condition is triggered (in our case&mdash;matching _Account_ records exist), the function returns a `Promise` rejected with an error web-service response. Otherwise, it returns nothing. In general, for hooks, if it returns nothing, the API call processing logic continues. If it returns a rejected `Promise`, the call processing logic is aborted, the database transaction is rolled back and the reason for rejection is returned to the API client.
 
-The complete reference for the transaction context object and helper functions that it exposes can be found in the [Transaction Context](https://github.com/boylesoftware/x2node-ws-resources#transaction-context) section of the module manual as well as in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html). Various transactional check helper functions exposed by the transaction context, such as the `rejectIfExists()` used above, take record filter specification as a parameter. This filter specification is passed on to the framework's DBOs module. This is the point where you may want to have a look at the [Filter Specification](https://github.com/boylesoftware/x2node-dbos#filter-specification) section of the module's manual.
+The complete reference for both the transaction context object and the helper functions it exposes, can be found in the [Transaction Context](https://github.com/boylesoftware/x2node-ws-resources#transaction-context) section of the module manual, as well as in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html). Various transactional check helper functions exposed by the transaction context, such as the `rejectIfExists()` used above, take record filter specification as a parameter. This filter specification is passed on to the framework's DBOs module. This is the point where you may want to have a look at the [Filter Specification](https://github.com/boylesoftware/x2node-dbos#filter-specification) section of the module's manual.
 
 ### Updated Record Field Uniqueness
 

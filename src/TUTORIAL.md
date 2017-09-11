@@ -704,7 +704,7 @@ It's nice that we have a what appears to be a fully functioning web-service so q
 
 But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take a second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifying it. A description for all the available hooks, can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
 
-We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with s).* Create a file per endpoint handler extension and replace the API endpoints specified in `server.js` as per below:
+To support the enpoint handler extensions we are about to create, replace the API endpoints specified in `server.js` as per below:
 
 ```javascript
 // assemble and run the web-service
@@ -749,7 +749,7 @@ ws.createApplication()
     ...
 ```
 
-For now, you can create empty handler extensions and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
+We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
 
 ```javascript
 'use strict';

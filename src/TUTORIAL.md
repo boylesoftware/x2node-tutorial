@@ -761,7 +761,7 @@ Now, let's have a look at our problems.
 
 ### Custom Validation
 
-The standard validators provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module that we used in our record type definitions cover most of what we need in terms of validating record data submitted to the API when a new record is created or an existing record is updated. Sometimes, however, standard validators are not sufficient. For example, let's say we don't want to allow any _Order_ record's `placedOn` field ever to be a Saturday. In our `record-type-defs.js` module we can add a custom validator and call it `notSaturday`:
+The standard validators provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module, that we used in our record type definitions, cover most of what we need in terms of validating record data submitted to the API, when a new record is created or an existing record is updated. Sometimes however, standard validators are not sufficient. For example, let's say we want to disallow the date in the _Order_ record's `placedOn` field to ever be on a Saturday. In our `record-type-defs.js` module, we can add a custom validator and call it `notSaturday`:
 
 ```javascript
 exports.validatorDefs = {
@@ -772,7 +772,7 @@ exports.validatorDefs = {
 
             // add validation error if the date is a Saturday
             if ((new Date(value)).getUTCDay() === 6)
-                ctx.addError('Live the world alone once a week!');
+                ctx.addError('Leave the world alone once a week!');
         }
 
         // proceed with the value unchanged
@@ -803,17 +803,17 @@ exports.recordTypes = {
 
 The custom validator function receives three arguments:
 
-* Parameters for a parameterized validator, such as `['maxLength', 100]`, etc. Our validator does not have any parameters, so we don't use this argument.
-* Validation context, which is the API that the framework provides to the validator implementation. See [Validation Context](https://github.com/boylesoftware/x2node-validators#validation-context) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual or the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-validators-ValidationContext.html).
-* The field value.
+1. Optional parameters such as `['maxLength', 100]`, etc. Our validator does not have any parameters, so we don't use this argument.
+2. Validation context, which is the API that the framework provides to the validator implementation. See the [Validation Context](https://github.com/boylesoftware/x2node-validators#validation-context) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module manual, or the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-validators-ValidationContext.html).
+3. The field value.
 
-If you look at our custom validator code, you'll see that we first check if there are ny validation errors already associated with the field. The validators are called by the framework in the same order they are specified in the record type definition. In our case, our `notSaturday` validator is preceded by the implicit check that the value is provided (the field is not optional) and the explicit check that the value is a valid date (the `date` standard validator). It makes not sense to test of the date is a Saturday if it's missing or is not a valid date. The `ctx.hasErrorsFor()` function allows us to check if the preceding validators failed.
+If you look at our custom validator code, you'll see first we check for any validation errors already associated with the field. The validators are called by the framework in the same order they are specified in the record type definition. In our case, the `notSaturday` validator is preceded by the implicit check that the value is provided (the field is not optional) and the explicit check that the value is a valid date (the `date` standard validator). It does not make sense to test if the date is a Saturday, if the value is empty or not a valid date. The `ctx.hasErrorsFor()` function allows us to check if the preceding validators failed.
 
-Then, we check if the date is a Saturday and if so, add a validation error to the context.
+Next, we check if the date is a Saturday, and if so, add a validation error to the context.
 
-And finally, we return the field value. Remember that validators are not _just_ validators. They can also be _value normalizers_ (e.g. the `lowercase` normalizer we used on the `email` field of the _Account_ record type). The function can return a modified value and that will be the value set back into the record field upon the validation completion. Since our validators is a _pure validator_ and does not normalize the value, we simple return it as it was passed to us.
+Finally, we return the field value. Remember that validators are not _just_ validators. They can also be _value normalizers_ for example, the `lowercase` normalizer we used on the `email` field of the _Account_ record type. The function can return a modified value and that will be the value sent back to the record field upon validation completion. Since our validator is a _pure validator_ and does not normalize the value, we simply return it as it was passed to us unmodified.
 
-See the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual for more details on different validation/normalization uses including custome validation error messages, error message internationalization, validation sets, etc.
+See the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual, for more details on different validation/normalization uses, including custom validation error messages, error message internationalization, validation sets, etc.
 
 ### New Record Field Uniqueness
 

@@ -674,6 +674,7 @@ And an _Order_ record (assuming our new customer account has ID 1 and the produc
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#1",

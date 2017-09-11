@@ -973,6 +973,7 @@ Another problem with submitting new orders that we have is referring to a non-ex
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#666",

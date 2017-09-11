@@ -548,7 +548,7 @@ Or use our simple API tester in a browser at [http://x2node.com/api-tester/](htt
 
 ![API Tester Screenshot](img/api-tester-screen.png)
 
-*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop running application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
+*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop running the application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
 
 So, let's make some API calls now. In the call examples below we are going to use `curl`, but it may be more convenient with the API tester&mdash;whichever is your preference.
 
@@ -569,9 +569,9 @@ Then send it to the running web-service:
 $ curl -v -H "Content-Type: application/json" --data-binary @new-product.json http://localhost:3001/products
 ```
 
-You should get an [HTTP 201](https://tools.ietf.org/html/rfc7231#section-6.3.2) response with the new record in the response body. Note, that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
+You should get an [HTTP 201](https://tools.ietf.org/html/rfc7231#section-6.3.2) response with the new record in the response body. Note that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
 
-Note, that the validation rules that we specified in the _Product_ record type definition should work. For example if we submit the following JSON as a new _Product_ record template:
+Note that the validation rules that we specified in the _Product_ record type definition should work. For example, if we submit the following JSON as a new _Product_ record template:
 
 ```json
 {
@@ -599,7 +599,7 @@ We will get an [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) res
 }
 ```
 
-In the `validationErrors` object, the invalid record fields are identified by [JSON pointers](https://tools.ietf.org/html/rfc6901) and have arrays of validation error messagees associated with them.
+In the `validationErrors` object, the invalid record fields are identified by [JSON pointers](https://tools.ietf.org/html/rfc6901) and have arrays of validation error messages associated with them.
 
 So, assuming that our new product record has record ID 1, we can read the record:
 
@@ -615,7 +615,7 @@ We can also search our products collection (consisting of just one product at th
 $ curl -v http://localhost:3001/products | python -mjson.tool
 ```
 
-Note, that the response is a "super-object" that includes the `records` array. This is because the endpoint is for the collection resource. Later on we are going to see how oather collection properties besides the `records` list can be included in the query response.
+Note that the response is a "super-object" that includes the `records` array. This is because the endpoint is for a collection resource. Later on we are going to see how other collection properties besides the `records` list can be included in the query response.
 
 To perform records collection search, the collection resource endpoint takes query parameters in the URL. For example:
 
@@ -623,7 +623,7 @@ To perform records collection search, the collection resource endpoint takes que
 $ curl -v "http://localhost:3001/products?f$available&f$name:pre=h&p=name,price&o=name&r=0,10" | python -mjson.tool
 ```
 
-The query above requests all available products with names starting with "H" (case-insensitive), in the returned records it asks only to include the product name and the product price, it asks to order the `records` array in the response by the product name and it asks to include only first 10 mathcing records in it. To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's manual.
+The query above returns a `records` array, ordered by product name, containing the product id, product name and product price for the first 10 matching product records available, which have a product name starting with “H” (case-insensitive). To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's manual.
 
 Now we can try to update our product record. To do that, we are going to send a `PATCH` request to the _Product_ individual resource endpoint with a [JSON patch](https://tools.ietf.org/html/rfc6902) specification in the body. Let's change our product price and remove the optional product description. To do that, create the patch document in `patch-product.json`:
 
@@ -634,7 +634,7 @@ Now we can try to update our product record. To do that, we are going to send a 
 ]
 ```
 
-And send it to the web-service:
+And send it to the web-service: *(Note: if using the X2 RESTful API Tester you will need to enter *`application/json-patch+json`* into the 'Content Type' form field)*.
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-product.json http://localhost:3001/products/1
@@ -642,13 +642,13 @@ $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary 
 
 The updated record will be included in the response.
 
-Now, to delete record, you'd send:
+Now, to delete the record, you'd send:
 
 ```shell
 $ curl -v -X DELETE http://localhost:3001/products/1
 ```
 
-But don't do it just yet as we are going to need our product record for the further work. Instead, let's go ahead and create an _Account_ record:
+But don't do it just yet, as we are going to need our product record for further work. Instead, let's go ahead and create an _Account_ record, by creating a new `new-account.json` template file containing the JSON below:
 
 ```json
 {
@@ -661,7 +661,13 @@ But don't do it just yet as we are going to need our product record for the furt
 
 The `passwordDigest` contains hex encoded SHA1 digest of word "blackbeard".
 
-And an _Order_ record (assuming our new customer account has ID 1 and the product also has ID 1):
+Then send it to the running web-service:
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-account.json http://localhost:3001/accounts
+```
+
+And an _Order_ record (assuming our new customer account has ID 1 and the product also has ID 1), create a new `new-order.json` template file containing the JSON below:
 
 ```json
 {
@@ -677,7 +683,13 @@ And an _Order_ record (assuming our new customer account has ID 1 and the produc
 }
 ```
 
-Note how we use references to records of other types. When we search records, we can resolve the references and include the referred records in the response. For example, we may have a screen in the front-end that shows orders. In the same screen, we want to show the ordered products by the product names, not the crypting references. So we can make the call:
+Then send it to the running web-service:
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-order.json http://localhost:3001/orders
+```
+
+Note how we use references to records of other types. When we search records, we can resolve the references and include the referred records in the response. For example, we may have a screen in the front-end that shows orders. In the same screen, we want to show the ordered products by the product names, not cryptic references, so we can make the call:
 
 ```json
 $ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.tool

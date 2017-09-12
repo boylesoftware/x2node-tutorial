@@ -1,5 +1,6 @@
 'use strict';
 
+// customer validators
 exports.validatorDefs = {
     'notSaturday': function(_, ctx, value) {
 
@@ -16,46 +17,45 @@ exports.validatorDefs = {
     }
 };
 
-function withRecordProps(props) {
+// common properties for all records
+const BASIC_RECORD_PROPS = {
+	'id': {
+		valueType: 'number',
+		role: 'id'
+	},
+	'version': {
+		valueType: 'number',
+		role: 'version'
+	},
+	'createdOn': {
+		valueType: 'datetime',
+		role: 'creationTimestamp',
+		column: 'created_on'
+	},
+	'createdBy': {
+		valueType: 'string',
+		role: 'creationActor',
+		column: 'created_by'
+	},
+	'modifiedOn': {
+		valueType: 'datetime',
+		role: 'modificationTimestamp',
+		optional: true,
+		column: 'modified_on'
+	},
+	'modifiedBy': {
+		valueType: 'string',
+		role: 'modificationActor',
+		optional: true,
+		column: 'modified_by'
+	}
+};
 
-    props['id'] = {
-        valueType: 'number',
-        role: 'id'
-    };
-    props['version'] = {
-        valueType: 'number',
-        role: 'version'
-    }
-    props['createdOn'] = {
-        valueType: 'datetime',
-        role: 'creationTimestamp',
-        column: 'created_on'
-    }
-    props['createdBy'] = {
-        valueType: 'string',
-        role: 'creationActor',
-        column: 'created_by'
-    }
-    props['modifiedOn'] = {
-        valueType: 'datetime',
-        role: 'modificationTimestamp',
-        optional: true,
-        column: 'modified_on'
-    }
-    props['modifiedBy'] = {
-        valueType: 'string',
-        role: 'modificationActor',
-        optional: true,
-        column: 'modified_by'
-    }
-
-    return props;
-}
-
+// record type definitions
 exports.recordTypes = {
     'Product': {
         table: 'products',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             'name': {
                 valueType: 'string',
                 validators: [ ['maxLength', 50] ]
@@ -76,7 +76,7 @@ exports.recordTypes = {
     },
     'Account': {
         table: 'accounts',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             'email': {
                 valueType: 'string',
                 validators: [ ['maxLength', 60], 'email', 'lowercase' ]
@@ -100,7 +100,7 @@ exports.recordTypes = {
     },
     'Order': {
         table: 'orders',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             'accountRef': {
                 valueType: 'ref(Account)',
                 column: 'account_id',

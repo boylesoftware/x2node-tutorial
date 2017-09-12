@@ -1642,60 +1642,57 @@ Now, let's add the meta-info properties to the record type definitions in our `r
 ```javascript
 ...
 
-function withRecordProps(props) {
-
-    props['id'] = {
-        valueType: 'number',
-        role: 'id'
-    };
-    props['version'] = {
-        valueType: 'number',
-        role: 'version'
-    }
-    props['createdOn'] = {
-        valueType: 'datetime',
-        role: 'creationTimestamp',
-        column: 'created_on'
-    }
-    props['createdBy'] = {
-        valueType: 'string',
-        role: 'creationActor',
-        column: 'created_by'
-    }
-    props['modifiedOn'] = {
-        valueType: 'datetime',
-        role: 'modificationTimestamp',
-        optional: true,
-        column: 'modified_on'
-    }
-    props['modifiedBy'] = {
-        valueType: 'string',
-        role: 'modificationActor',
-        optional: true,
-        column: 'modified_by'
-    }
-
-    return props;
-}
+const BASIC_RECORD_PROPS = {
+	'id': {
+		valueType: 'number',
+		role: 'id'
+	},
+	'version': {
+		valueType: 'number',
+		role: 'version'
+	},
+	'createdOn': {
+		valueType: 'datetime',
+		role: 'creationTimestamp',
+		column: 'created_on'
+	},
+	'createdBy': {
+		valueType: 'string',
+		role: 'creationActor',
+		column: 'created_by'
+	},
+	'modifiedOn': {
+		valueType: 'datetime',
+		role: 'modificationTimestamp',
+		optional: true,
+		column: 'modified_on'
+	},
+	'modifiedBy': {
+		valueType: 'string',
+		role: 'modificationActor',
+		optional: true,
+		column: 'modified_by'
+	}
+};
 
 exports.recordTypes = {
     'Product': {
         table: 'products',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             // don't forget to remove id, it's in the withRecordProps now
             ...
         })
     },
     'Account': {
         table: 'accounts',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             // remove the id
             ...
         })
     },
     'Order': {
         table: 'orders',
-        properties: withRecordProps({
+        properties: Object.assign({}, BASIC_RECORD_PROPS, {
             // remove the id
             ...
         })
@@ -1703,7 +1700,7 @@ exports.recordTypes = {
 };
 ```
 
-The code above shows another useful technique: when there are common properties for different record types, instead of copy-pasting their definitions you can extract them into a function (another technique for that is using inheritance&mdash;the records module understands prototype chains in the definitions).
+The code above shows another useful technique: when there are common properties for different record types, instead of copy-pasting their definitions you can extract them into an object (another technique for that is using inheritance&mdash;the records module understands prototype chains in the definitions).
 
 Now, if we query our product the result is going to be slightly different:
 

@@ -1016,7 +1016,26 @@ This is similar to what we've already done in the `accounts.js` handler, but mor
 
 ### Preventing Referred Records Deletion
 
-Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. Let's add the appropriate hooks to our `account.js` handler:
+Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. 
+
+Currently, (assuming a product with ID 1 has been purchased by a customer with an account which also has an ID of 1)... 
+
+...if you try to delete a product with ID 1:
+
+```shell
+$ curl -v -X DELETE http://localhost:3001/products/1
+```
+...or delete an account with ID 1
+
+```shell
+$ curl -v -X DELETE http://localhost:3001/accounts/1
+```
+
+...the web-service will return another [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error, with an unhelpful error message: "Internal server error".  
+
+
+
+Instead, the web-service should return a [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response with a helpful error message, so let's add the appropriate hooks to our `account.js` handler:
 
 ```javascript
 ...
@@ -1068,7 +1087,7 @@ module.exports = {
 
 Note how we extract the addressed record (_Account_ or _Product_) ID from the call URI. When we used `ws.addEntpoint()` function in `server.js` to define the `/accounts/{accountId}` and `/products/{productId}` endpoints, we used capturing groups in the URI regular expressions. Those groups translate to the `uriParams` array on the API call object available to the handlers via the `call` property of the transaction context. The API call object is what the low-level [x2node-ws](https://github.com/boylesoftware/x2node-ws) module operates with and it exposes many useful things to the handlers. See its full description in the [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) section of the manual as well as its full [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-ServiceCall.html).
 
-And you also can see that in this case we don't need to call `txCtx.refToId()` function to convert the reference to the ID as we are getting the ID straight from the URI.
+You should also take note that in this case, we don't need to call the `txCtx.refToId()` function in order to convert the reference to the ID, as we are getting the ID straight from the URI.
 
 ### Backend Field Value Calculation
 

@@ -548,7 +548,7 @@ Or use our simple API tester in a browser at [http://x2node.com/api-tester/](htt
 
 ![API Tester Screenshot](img/api-tester-screen.png)
 
-*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop running application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
+*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop the application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
 
 So, let's make some API calls now. In the call examples below we are going to use `curl`, but it may be more convenient with the API tester&mdash;whichever is your preference.
 
@@ -569,9 +569,9 @@ Then send it to the running web-service:
 $ curl -v -H "Content-Type: application/json" --data-binary @new-product.json http://localhost:3001/products
 ```
 
-You should get an [HTTP 201](https://tools.ietf.org/html/rfc7231#section-6.3.2) response with the new record in the response body. Note, that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
+You should get an [HTTP 201](https://tools.ietf.org/html/rfc7231#section-6.3.2) response with the new record in the response body. Note that the record ID is generated automatically and is returned in the `Content-Location` response header (the new individual resource URI) as well as the record in the response body. Since it's the first record that we created, our new product probably got the ID of 1.
 
-Note, that the validation rules that we specified in the _Product_ record type definition should work. For example if we submit the following JSON as a new _Product_ record template:
+Note that the validation rules that we specified in the _Product_ record type definition should work. For example, if we submit the following JSON as a new _Product_ record template:
 
 ```json
 {
@@ -599,7 +599,7 @@ We will get an [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) res
 }
 ```
 
-In the `validationErrors` object, the invalid record fields are identified by [JSON pointers](https://tools.ietf.org/html/rfc6901) and have arrays of validation error messagees associated with them.
+In the `validationErrors` object, the invalid record fields are identified by [JSON pointers](https://tools.ietf.org/html/rfc6901) and have arrays of validation error messages associated with them.
 
 So, assuming that our new product record has record ID 1, we can read the record:
 
@@ -615,7 +615,7 @@ We can also search our products collection (consisting of just one product at th
 $ curl -v http://localhost:3001/products | python -mjson.tool
 ```
 
-Note, that the response is a "super-object" that includes the `records` array. This is because the endpoint is for the collection resource. Later on we are going to see how oather collection properties besides the `records` list can be included in the query response.
+Note that the response is a "super-object" that includes the `records` array. This is because the endpoint is for a collection resource. Later on we are going to see how other collection properties besides the `records` list can be included in the query response.
 
 To perform records collection search, the collection resource endpoint takes query parameters in the URL. For example:
 
@@ -623,7 +623,7 @@ To perform records collection search, the collection resource endpoint takes que
 $ curl -v "http://localhost:3001/products?f$available&f$name:pre=h&p=name,price&o=name&r=0,10" | python -mjson.tool
 ```
 
-The query above requests all available products with names starting with "H" (case-insensitive), in the returned records it asks only to include the product name and the product price, it asks to order the `records` array in the response by the product name and it asks to include only first 10 mathcing records in it. To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's manual.
+The query above returns a `records` array, ordered by product name, containing the product id, product name and product price for the first 10 matching product records available, which have a product name starting with “H” (case-insensitive). To see all the search options read [Record Search](https://github.com/boylesoftware/x2node-ws-resources#record-search) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module's manual.
 
 Now we can try to update our product record. To do that, we are going to send a `PATCH` request to the _Product_ individual resource endpoint with a [JSON patch](https://tools.ietf.org/html/rfc6902) specification in the body. Let's change our product price and remove the optional product description. To do that, create the patch document in `patch-product.json`:
 
@@ -634,7 +634,7 @@ Now we can try to update our product record. To do that, we are going to send a 
 ]
 ```
 
-And send it to the web-service:
+And send it to the web-service: *(Note: if using the X2 RESTful API Tester you will need to enter *`application/json-patch+json`* into the 'Content Type' form field)*.
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-product.json http://localhost:3001/products/1
@@ -642,13 +642,13 @@ $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary 
 
 The updated record will be included in the response.
 
-Now, to delete record, you'd send:
+Now, to delete the record, you'd send:
 
 ```shell
 $ curl -v -X DELETE http://localhost:3001/products/1
 ```
 
-But don't do it just yet as we are going to need our product record for the further work. Instead, let's go ahead and create an _Account_ record:
+But don't do it just yet, as we are going to need our product record for further work. Instead, let's go ahead and create an _Account_ record, by creating a new `new-account.json` template file containing the JSON below:
 
 ```json
 {
@@ -661,13 +661,20 @@ But don't do it just yet as we are going to need our product record for the furt
 
 The `passwordDigest` contains hex encoded SHA1 digest of word "blackbeard".
 
-And an _Order_ record (assuming our new customer account has ID 1 and the product also has ID 1):
+Then send it to the running web-service:
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-account.json http://localhost:3001/accounts
+```
+
+And an _Order_ record (assuming our new customer account has ID 1 and the product also has ID 1), create a new `new-order.json` template file containing the JSON below:
 
 ```json
 {
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#1",
@@ -677,7 +684,13 @@ And an _Order_ record (assuming our new customer account has ID 1 and the produc
 }
 ```
 
-Note how we use references to records of other types. When we search records, we can resolve the references and include the referred records in the response. For example, we may have a screen in the front-end that shows orders. In the same screen, we want to show the ordered products by the product names, not the crypting references. So we can make the call:
+Then send it to the running web-service:
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-order.json http://localhost:3001/orders
+```
+
+Note how we use references to records of other types. When we search records, we can resolve the references and include the referred records in the response. For example, we may have a screen in the front-end that shows orders. In the same screen, we want to show the ordered products by the product names, not cryptic references, so we can make the call:
 
 ```json
 $ curl -v "http://localhost:3001/orders?p=*,items.productRef.*" | python -mjson.tool
@@ -687,11 +700,11 @@ Along with the `records` list, in the response we are going to see `referredReco
 
 ## Tightening the Screws
 
-It's nice that we have a what appears to be fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let go over them one by one and fix them.
+It's nice that we have a what appears to be a fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let's go over them one by one and fix them.
 
-But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifiying it. The description of all the different hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take a second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifying it. Complete descriptions for all available hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
 
-We recommend keeping each endpoint handler extension in its own file under `lib/handlers` folder in the project. For example, in our `server.js` we are going to have:
+To support the enpoint handler extensions we are about to create, replace the API endpoints specified in `server.js` as per below:
 
 ```javascript
 // assemble and run the web-service
@@ -736,7 +749,7 @@ ws.createApplication()
     ...
 ```
 
-For now, you can create empty handler extensions and we will be filling them in as we progress in our tutorial. An empty extension, for example at `lib/handlers/products.js`, can be:
+We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
 
 ```javascript
 'use strict';
@@ -748,7 +761,7 @@ Now, let's have a look at our problems.
 
 ### Custom Validation
 
-The standard validators provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module that we used in our record type definitions cover most of what we need in terms of validating record data submitted to the API when a new record is created or an existing record is updated. Sometimes, however, standard validators are not sufficient. For example, let's say we don't want to allow any _Order_ record's `placedOn` field ever to be a Saturday. In our `record-type-defs.js` module we can add a custom validator and call it `notSaturday`:
+The standard validators provided by the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module, that we used in our record type definitions, cover most of what we need in terms of validating record data submitted to the API, when a new record is created or an existing record is updated. Sometimes however, standard validators are not sufficient. For example, let's say we want to disallow the date in the _Order_ record's `placedOn` field to ever be on a Saturday. In our `record-type-defs.js` module, we can add a custom validator and call it `notSaturday`:
 
 ```javascript
 exports.validatorDefs = {
@@ -759,7 +772,7 @@ exports.validatorDefs = {
 
             // add validation error if the date is a Saturday
             if ((new Date(value)).getUTCDay() === 6)
-                ctx.addError('Live the world alone once a week!');
+                ctx.addError('Leave the world alone once a week!');
         }
 
         // proceed with the value unchanged
@@ -790,17 +803,17 @@ exports.recordTypes = {
 
 The custom validator function receives three arguments:
 
-* Parameters for a parameterized validator, such as `['maxLength', 100]`, etc. Our validator does not have any parameters, so we don't use this argument.
-* Validation context, which is the API that the framework provides to the validator implementation. See [Validation Context](https://github.com/boylesoftware/x2node-validators#validation-context) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual or the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-validators-ValidationContext.html).
-* The field value.
+1. Optional parameters such as `['maxLength', 100]`, etc. Our validator does not have any parameters, so we don't use this argument.
+2. Validation context, which is the API that the framework provides to the validator implementation. See the [Validation Context](https://github.com/boylesoftware/x2node-validators#validation-context) section of the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module manual, or the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-validators-ValidationContext.html).
+3. The field value.
 
-If you look at our custom validator code, you'll see that we first check if there are ny validation errors already associated with the field. The validators are called by the framework in the same order they are specified in the record type definition. In our case, our `notSaturday` validator is preceded by the implicit check that the value is provided (the field is not optional) and the explicit check that the value is a valid date (the `date` standard validator). It makes not sense to test of the date is a Saturday if it's missing or is not a valid date. The `ctx.hasErrorsFor()` function allows us to check if the preceding validators failed.
+If you look at our custom validator code, you'll see first we check for any validation errors already associated with the field. The validators are called by the framework in the same order they are specified in the record type definition. In our case, the `notSaturday` validator is preceded by the implicit check that the value is provided (the field is not optional) and the explicit check that the value is a valid date (the `date` standard validator). It does not make sense to test if the date is a Saturday, if the value is empty or not a valid date. The `ctx.hasErrorsFor()` function allows us to check if the preceding validators failed.
 
-Then, we check if the date is a Saturday and if so, add a validation error to the context.
+Next, we check if the date is a Saturday, and if so, add a validation error to the context.
 
-And finally, we return the field value. Remember that validators are not _just_ validators. They can also be _value normalizers_ (e.g. the `lowercase` normalizer we used on the `email` field of the _Account_ record type). The function can return a modified value and that will be the value set back into the record field upon the validation completion. Since our validators is a _pure validator_ and does not normalize the value, we simple return it as it was passed to us.
+Finally, we return the field value. Remember that validators are not _just_ validators. They can also be _value normalizers_ for example, the `lowercase` normalizer we used on the `email` field of the _Account_ record type. The function can return a modified value and that will be the value sent back to the record field upon validation completion. Since our validator is a _pure validator_ and does not normalize the value, we simply return it as it was passed to us unmodified.
 
-See the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual for more details on different validation/normalization uses including custome validation error messages, error message internationalization, validation sets, etc.
+See the [x2node-validators](https://github.com/boylesoftware/x2node-validators) module's manual, for more details on different validation/normalization uses, including custom validation error messages, error message internationalization, validation sets, etc.
 
 ### New Record Field Uniqueness
 
@@ -830,14 +843,14 @@ Restart the web-service and try to `POST` the `new-account.json` template to the
 
 The `txCtx` argument passed into the hook is the _transaction context_, which is an object made available to all hooks and presents the framework's API to the hook implementation. Among other things, the transaction context exposes a number of convenience functions, such as the `rejectIfExists()` function used in our example above. The function takes the following four arguments:
 
-* Name of the record type to query in the database.
-* Record filter specification (read on to see more about it).
-* HTTP status code for the error response if the condition is triggered.
-* Error message to include in the error response if the condition is triggered.
+1. Name of the record type to query in the database.
+2. Record filter specification (read on to see more about it).
+3. HTTP status code for the error response if the condition is triggered.
+4. Error message to include in the error response if the condition is triggered.
 
-If the condition is triggered (in our case&mdash;matching _Account_ records exist), the function returns a `Promise` rejected with an error web-service response. Otherwise, it returns nothing. In general for the hooks, if a hook returns nothing, the API call processing logic continues. If it returns a rejected `Promise`, the call processing logic is aborted, the database transaction is rolled back and the rejection reason is returned to the API client.
+If the condition is triggered (in our case&mdash;matching _Account_ records exist), the function returns a `Promise` rejected with an error web-service response. Otherwise, it returns nothing. In general, for hooks, if it returns nothing, the API call processing logic continues. If it returns a rejected `Promise`, the call processing logic is aborted, the database transaction is rolled back and the reason for rejection is returned to the API client.
 
-The complete reference for the transaction context object and helper functions that it exposes can be found in the [Transaction Context](https://github.com/boylesoftware/x2node-ws-resources#transaction-context) section of the module manual as well as in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html). Various transactional check helper functions exposed by the transaction context, such as the `rejectIfExists()` used above, take record filter specification as a parameter. This filter specification is passed on to the framework's DBOs module. This is the point where you may want to have a look at the [Filter Specification](https://github.com/boylesoftware/x2node-dbos#filter-specification) section of the module's manual.
+The complete reference for both the transaction context object and the helper functions it exposes, can be found in the [Transaction Context](https://github.com/boylesoftware/x2node-ws-resources#transaction-context) section of the module manual, as well as in the [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-resources-TransactionContext.html). Various transactional check helper functions exposed by the transaction context, such as the `rejectIfExists()` used above, take record filter specification as a parameter. This filter specification is passed on to the framework's DBOs module. This is the point where you may want to have a look at the [Filter Specification](https://github.com/boylesoftware/x2node-dbos#filter-specification) section of the module's manual.
 
 ### Updated Record Field Uniqueness
 
@@ -906,6 +919,7 @@ Another problem related to field uniqueness is that our database does not allow 
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#1",
@@ -959,6 +973,7 @@ Another problem with submitting new orders that we have is referring to a non-ex
   "accountRef": "Account#1",
   "placedOn": "2017-08-01",
   "status": "NEW",
+  "paymentTransactionId": "Fake-Payments-Backend-Transaction-ID",
   "items": [
     {
       "productRef": "Product#666",

@@ -74,7 +74,7 @@ module.exports = {
             'Product', {
                 props: [ 'price' ],
                 filter: [
-                    [ 'id => oneof', recordTmpl.items.map(
+                    [ 'id => in', recordTmpl.items.map(
                         item => txCtx.refToId('Product', item.productRef)) ],
                     [ 'available => is', true ]
                 ],

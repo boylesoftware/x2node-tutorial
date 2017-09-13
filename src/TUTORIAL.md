@@ -1002,7 +1002,7 @@ module.exports = {
         // then check if all products exist and are available
         ).then(() => txCtx.rejectIfNotExactNum(
             'Product', [
-                [ 'id => oneof', recordTmpl.items.map(
+                [ 'id => in', recordTmpl.items.map(
                     item => txCtx.refToId('Product', item.productRef)) ],
                 [ 'available => is', true ]
             ], recordTmpl.items.length,
@@ -1431,7 +1431,7 @@ module.exports = {
             'Product', {
                 props: [ 'price' ],
                 filter: [
-                    [ 'id => oneof', recordTmpl.items.map(
+                    [ 'id => in', recordTmpl.items.map(
                         item => txCtx.refToId('Product', item.productRef)) ],
                     [ 'available => is', true ]
                 ],

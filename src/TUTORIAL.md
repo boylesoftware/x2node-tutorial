@@ -548,7 +548,7 @@ Or use our simple API tester in a browser at [http://x2node.com/api-tester/](htt
 
 ![API Tester Screenshot](img/api-tester-screen.png)
 
-*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop running the application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
+*Important:* We are going to be actively modifying our application code throughout the tutorial. Whenever we do that, the application needs to be restarted. To stop the application you can simply send `Ctrl+C` to the console window. If you use the API Tester, the browser is going to keep the HTTP connections it makes to our web-service open for a while ("keep-alive" performance optimization). Our web-service will not exit until all those connections are closed, so watch the messages in the console window and give the process some time to wait for all the connections to close. Naturally, `curl` does not have that problem.
 
 So, let's make some API calls now. In the call examples below we are going to use `curl`, but it may be more convenient with the API tester&mdash;whichever is your preference.
 
@@ -702,7 +702,7 @@ Along with the `records` list, in the response we are going to see `referredReco
 
 It's nice that we have a what appears to be a fully functioning web-service so quickly, but a closer look reveals some serious problems with our implementation. Let's go over them one by one and fix them.
 
-But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take a second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifying it. A description for all the available hooks, can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
+But first, a few words about the endpoint handlers. The `handlers.collectionResource()` and `handlers.individualResource()` handler factory methods can take a second argument, which is the default handler extension. The extension is an object with hooks. Each hook&mdash;a function&mdash;plugs into a specific point in the handler's call processing logic and allows extending and/or modifying it. Complete descriptions for all available hooks can be found in the [Handler Extensions](https://github.com/boylesoftware/x2node-ws-resources#handler-extensions) section of the [x2node-ws-resources](https://github.com/boylesoftware/x2node-ws-resources) module manual.
 
 To support the enpoint handler extensions we are about to create, replace the API endpoints specified in `server.js` as per below:
 

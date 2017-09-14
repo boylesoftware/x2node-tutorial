@@ -1206,7 +1206,7 @@ module.exports = {
 };
 ```
 
-We can test this by creating a new patch document called `patch-account.json`, containing the JSON below:
+We can test this by creating a new patch document which complies with the [JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format standards called `json-merge-patch-account.json`, containing the JSON below:
 
 ```json
 {
@@ -1219,7 +1219,7 @@ Now, if we send a `PATCH` request to the `/accounts/3` endpoint (assuming we int
 _Note: if using the X2 RESTful API Tester you will need to enter application/merge-patch+json into the 'Content Type' form field.)_:
 
 ```shell
-$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @patch-account.json http://localhost:3001/accounts/3
+$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
 ```
 
 ...we will get back our updated record:
@@ -1281,8 +1281,26 @@ Now we support both:
 
 _Note: if using the X2 RESTful API Tester you will need to enter application/json-patch+json into the 'Content Type' form field.)_:
 
+Create a new patch document which complies with the [JSON Patch](https://tools.ietf.org/html/rfc6902) format standards called `json-patch-account.json`, containing the JSON below:
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/firstName",
+    "value": "William"
+  },
+  {
+    "op": "replace",
+    "path": "/password",
+    "value": "piecesofeight!"
+  }
+]
+
+```
+
 ```shell
-$ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-account.json http://localhost:3001/accounts/3
+$ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @json-patch-account.json http://localhost:3001/accounts/3
 ```
 
 [JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format
@@ -1290,7 +1308,7 @@ $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary 
 _Note: if using the X2 RESTful API Tester you will need to enter application/merge-patch+json into the 'Content Type' form field.)_:
 
 ```shell
-$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @patch-account.json http://localhost:3001/accounts/3
+$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
 ```
 
 ### Backend Operations

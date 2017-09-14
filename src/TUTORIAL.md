@@ -749,12 +749,36 @@ ws.createApplication()
     ...
 ```
 
-We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
+We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products: `lib/handlers/products.js`, would be:
 
 ```javascript
 'use strict';
 
 module.exports = {};
+```
+
+At this stage, we should have the following project structure:
+
+```
+x2tutorial/
++--lib/
+|  +--handlers/
+|     +--account.js
+|     +--accounts.js
+|     +--order.js
+|     +--orders.js
+|     +--product.js
+|     +--products.js
+|  +--record-type-defs.js
++--misc/
+|  +--schema/
+|     +--create-schema-mysql.sql
++--node_modules/
+|  +--...
++--.env
++--package-lock.json
++--package.json
++--server.js
 ```
 
 Now, let's have a look at our problems.

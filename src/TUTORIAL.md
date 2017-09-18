@@ -1040,24 +1040,18 @@ This is similar to what we've already done in the `accounts.js` handler, but mor
 
 ### Preventing Referred Records Deletion
 
-Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. 
-
-Currently, (assuming a product with ID 1 has been purchased by a customer with an account which also has an ID of 1)... 
-
-...if you try to delete a product with ID 1:
+Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. Currently, (assuming a product with ID 1 has been purchased by a customer with an account which also has an ID of 1) if you try to delete a product with ID 1:
 
 ```shell
 $ curl -v -X DELETE http://localhost:3001/products/1
 ```
-...or delete an account with ID 1
+or delete an account with ID 1
 
 ```shell
 $ curl -v -X DELETE http://localhost:3001/accounts/1
 ```
 
-...the web-service will return another [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error, with an unhelpful error message: "Internal server error".  
-
-
+the web-service will return another [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error, with an unhelpful error message: "Internal server error".  
 
 Instead, the web-service should return a [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response with a helpful error message, so let's add the appropriate hooks to our `account.js` handler:
 
@@ -1119,7 +1113,7 @@ When we work with our _Account_ records, we have to provide a `passwordDigest` v
 
 Therefore, when the client creates and updates _Account_ records, we'd rather have it send the account password in plain text and have our web-service calculate the digest.
 
-**Important: You must be able to ensure clients may only send passwords in plain text, if they are using a secure encrypted connection with the server.**
+**Important: Please make sure that in a production environment sensitive information such as plain text passwords are exchanged between the client and the web-service over a secure connection (SSL).**
 
 First, let's see how this can be done for a call to create a new account.
 
@@ -1158,13 +1152,13 @@ Now, if we create a new _Account_ record, by replacing the contents of the `new-
   "password": "hoistthesales!"
 }
 ```
-And `POST` it to the web-service;
+and `POST` it to the web-service;
 
 ```shell
 $ curl -v -H "Content-Type: application/json" --data-binary @new-account.json http://localhost:3001/accounts
 ```
 
-...the record created will be something like this:
+the record created will be something like this:
 
 ```json
 {
@@ -1222,7 +1216,7 @@ _Note: if using the X2 RESTful API Tester you will need to enter application/mer
 $ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
 ```
 
-...we will get back our updated record:
+we will get back our updated record:
 
 ```json
 {

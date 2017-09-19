@@ -634,7 +634,7 @@ Now we can try to update our product record. To do that, we are going to send a 
 ]
 ```
 
-And send it to the web-service: *(Note: if using the X2 RESTful API Tester you will need to enter *`application/json-patch+json`* into the 'Content Type' form field)*.
+And send it to the web-service: *(Note: if using the X2 RESTful API Tester make sure `application/json-patch+json` is present in the 'Content Type' form field.)*.
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-product.json http://localhost:3001/products/1
@@ -1210,7 +1210,7 @@ We can test this by creating a new patch document which complies with the [JSON 
 ```
 Now, if we send a `PATCH` request to the `/accounts/3` endpoint (assuming we intend to update an account with an ID of 3)
 
-_Note: if using the X2 RESTful API Tester you will need to enter application/merge-patch+json into the 'Content Type' form field.)_:
+_Note: if using the X2 RESTful API Tester make sure `application/merge-patch+json` is present in the 'Content Type' form field.)_:
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
@@ -1273,7 +1273,7 @@ Now we support both:
 
 [JSON Patch](https://tools.ietf.org/html/rfc6902) format
 
-_Note: if using the X2 RESTful API Tester you will need to enter application/json-patch+json into the 'Content Type' form field.)_:
+_Note: if using the X2 RESTful API Tester make sure `application/json-patch+json` is present in the 'Content Type' form field.)_:
 
 Create a new patch document which complies with the [JSON Patch](https://tools.ietf.org/html/rfc6902) format standards called `json-patch-account.json`, containing the JSON below:
 
@@ -1299,7 +1299,7 @@ $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary 
 
 [JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format
 
-_Note: if using the X2 RESTful API Tester you will need to enter application/merge-patch+json into the 'Content Type' form field.)_:
+_Note: if using the X2 RESTful API Tester make sure `application/merge-patch+json` is present in the 'Content Type' form field.)_:
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3

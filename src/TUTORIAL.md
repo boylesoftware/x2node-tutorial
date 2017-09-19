@@ -634,7 +634,7 @@ Now we can try to update our product record. To do that, we are going to send a 
 ]
 ```
 
-And send it to the web-service: *(Note: if using the X2 RESTful API Tester you will need to enter *`application/json-patch+json`* into the 'Content Type' form field)*.
+And send it to the web-service: *(Note: if using the X2 RESTful API Tester make sure `application/json-patch+json` is present in the 'Content Type' form field.)*.
 
 ```shell
 $ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @patch-product.json http://localhost:3001/products/1
@@ -749,12 +749,36 @@ ws.createApplication()
     ...
 ```
 
-We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products `lib/handlers/products.js`, would be:
+We recommend keeping each endpoint handler extension in its own file under the project folder: `lib/handlers`. *Note: endpoint handler extension file names differentiated between collections (ending with 's') and individual resources (not ending with 's').* For now, you can create 6 empty handler extensions as specified above, and we will fill them in as we progress through the tutorial. For example, an empty handler extension for products: `lib/handlers/products.js`, would be:
 
 ```javascript
 'use strict';
 
 module.exports = {};
+```
+
+At this stage, we should have the following project structure:
+
+```
+x2tutorial/
++--lib/
+|  +--handlers/
+|     +--account.js
+|     +--accounts.js
+|     +--order.js
+|     +--orders.js
+|     +--product.js
+|     +--products.js
+|  +--record-type-defs.js
++--misc/
+|  +--schema/
+|     +--create-schema-mysql.sql
++--node_modules/
+|  +--...
++--.env
++--package-lock.json
++--package.json
++--server.js
 ```
 
 Now, let's have a look at our problems.
@@ -1016,7 +1040,20 @@ This is similar to what we've already done in the `accounts.js` handler, but mor
 
 ### Preventing Referred Records Deletion
 
-Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. Let's add the appropriate hooks to our `account.js` handler:
+Another situation we must gracefully prevent is deleting _Product_ and _Account_ records when _Order_ records exist for them. Currently, (assuming a product with ID 1 has been purchased by a customer with an account which also has an ID of 1) if you try to delete a product with ID 1:
+
+```shell
+$ curl -v -X DELETE http://localhost:3001/products/1
+```
+or delete an account with ID 1
+
+```shell
+$ curl -v -X DELETE http://localhost:3001/accounts/1
+```
+
+the web-service will return another [HTTP 500](https://tools.ietf.org/html/rfc7231#section-6.6.1) error, with an unhelpful error message: "Internal server error".  
+
+Instead, the web-service should return a [HTTP 400](https://tools.ietf.org/html/rfc7231#section-6.5.1) response with a helpful error message, so let's add the appropriate hooks to our `account.js` handler:
 
 ```javascript
 ...
@@ -1068,13 +1105,19 @@ module.exports = {
 
 Note how we extract the addressed record (_Account_ or _Product_) ID from the call URI. When we used `ws.addEntpoint()` function in `server.js` to define the `/accounts/{accountId}` and `/products/{productId}` endpoints, we used capturing groups in the URI regular expressions. Those groups translate to the `uriParams` array on the API call object available to the handlers via the `call` property of the transaction context. The API call object is what the low-level [x2node-ws](https://github.com/boylesoftware/x2node-ws) module operates with and it exposes many useful things to the handlers. See its full description in the [Service Call](https://github.com/boylesoftware/x2node-ws#service-call) section of the manual as well as its full [API reference](https://boylesoftware.github.io/x2node-api-reference/module-x2node-ws-ServiceCall.html).
 
-And you also can see that in this case we don't need to call `txCtx.refToId()` function to convert the reference to the ID as we are getting the ID straight from the URI.
+You should also take note that in this case, we don't need to call the `txCtx.refToId()` function in order to convert the reference to the ID, as we are getting the ID straight from the URI.
 
 ### Backend Field Value Calculation
 
-When we work with our _Account_ records we have to provide the `passwordDigest` value to the API, which means the client code has to deal with the digest calculation, while the password check will be ultimately performed in the backend. That means that we will have to maintain the digest algorithms in sync on both the client and the server side. Besides, cyptographic digest functionality may not be readily available on the client side. All that means that we'd rather have the client send the account password in plain text when it creates and updates _Account_ records and have our web-service calculate the digests.
+When we work with our _Account_ records, we have to provide a `passwordDigest` value to the API, so code running on the client must compute the digest. However, ultimately the password check will be performed by the server. For this to work, we must maintain the digest algorithms on both the client and server, keeping them in sync. Also, another potential issue with this approach is, cryptographic digest functionality may not be readily available on the client.
 
-First, let's see how it can be done for the new account creation call. The record template submitted with the `POST` call to our `/accounts` endpoint can have fields that are not described in the record type definition. Such fields are simply ignored by the framework. So, we could include `password` field in the record template and have a hook in our `accounts.js` handler convert it to the `passwordDigest` value. That must happen before the template is validated (`passwordDigest` is a required field) and the hook for that is called `prepareCreateSpec`:
+Therefore, when the client creates and updates _Account_ records, we'd rather have it send the account password in plain text and have our web-service calculate the digest.
+
+**Important: Please make sure that in a production environment sensitive information such as plain text passwords are exchanged between the client and the web-service over a secure connection (SSL).**
+
+First, let's see how this can be done for a call to create a new account.
+
+A record template submitted with a `POST` call to our `/accounts` endpoint, can have fields that are _not_ described in the record type definition. Such fields are simply ignored by the framework. So, we could include a `password` field in the record template and have a hook in our `accounts.js` handler convert it to the `passwordDigest` value required. However, this must happen before the template is validated, as `passwordDigest` is a required field, so for this purpose we will use the `prepareCreateSpec` hook:
 
 ```javascript
 ...
@@ -1099,7 +1142,7 @@ module.exports = {
 };
 ```
 
-Now, if we `POST` something like this:
+Now, if we create a new _Account_ record, by replacing the contents of the `new-account.json` record template file created earlier, with the JSON below:
 
 ```json
 {
@@ -1108,6 +1151,11 @@ Now, if we `POST` something like this:
   "lastName": "Bones",
   "password": "hoistthesales!"
 }
+```
+and `POST` it to the web-service;
+
+```shell
+$ curl -v -H "Content-Type: application/json" --data-binary @new-account.json http://localhost:3001/accounts
 ```
 
 the record created will be something like this:
@@ -1122,7 +1170,11 @@ the record created will be something like this:
 }
 ```
 
-And now let's see how we can do the same on the record update. There is a hook called `prepareUpdateSpec`, which is called before the patch specification document is parsed by the handler. That gives the handler a chance to modify the patch document before it is processed. So far when we used the `PATCH` calls we used the [JSON Patch](https://tools.ietf.org/html/rfc6902) format. The problem here is that this format is such that it's tricky to write logic that analyzes the patch document, checks if it tries to update `password` field and modify it before proceeding. The handler, however, also supports another patch document format, which is [JSON Merge Patch](https://tools.ietf.org/html/rfc7396). We can use it, so that our hook logic is similar to what we have in the `prepareCreateSpec` hook. So, in the `account.js` handler:
+Let's see how we can do the same when updating an account.
+
+There is a hook called `prepareUpdateSpec`, which is called before the patch specification document is parsed by the handler. That gives the handler a chance to modify the patch document before it is processed. Up to this point we have used the [JSON Patch](https://tools.ietf.org/html/rfc6902) format for all `PATCH` calls. The problem with using this format is, it's tricky to write logic that analyzes the patch document to check for a `password` field and then to modify it before proceeding. However, the handler, also supports another patch document format: [JSON Merge Patch](https://tools.ietf.org/html/rfc7396). Therefore, by using the [JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format instead, we can use similar logic as we have used before in the `prepareCreateSpec` hook. 
+
+So, to implement this, add the `prepareUpdateSpec` hook to the `account.js` handler as per below:
 
 ```javascript
 ...
@@ -1148,7 +1200,7 @@ module.exports = {
 };
 ```
 
-Now if we send a `PATCH` with the following merge patch document to `/accounts/3` endpoint:
+We can test this by creating a new patch document which complies with the [JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format standards called `json-merge-patch-account.json`, containing the JSON below:
 
 ```json
 {
@@ -1156,8 +1208,15 @@ Now if we send a `PATCH` with the following merge patch document to `/accounts/3
   "password": "piecesofeight!"
 }
 ```
+Now, if we send a `PATCH` request to the `/accounts/3` endpoint (assuming we intend to update an account with an ID of 3)
 
-we will get our updated record:
+_Note: if using the X2 RESTful API Tester make sure `application/merge-patch+json` is present in the 'Content Type' form field.)_:
+
+```shell
+$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
+```
+
+we will get back our updated record:
 
 ```json
 {
@@ -1208,6 +1267,42 @@ module.exports = {
 
     ...
 };
+```
+
+Now we support both:
+
+[JSON Patch](https://tools.ietf.org/html/rfc6902) format
+
+_Note: if using the X2 RESTful API Tester make sure `application/json-patch+json` is present in the 'Content Type' form field.)_:
+
+Create a new patch document which complies with the [JSON Patch](https://tools.ietf.org/html/rfc6902) format standards called `json-patch-account.json`, containing the JSON below:
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/firstName",
+    "value": "William"
+  },
+  {
+    "op": "replace",
+    "path": "/password",
+    "value": "piecesofeight!"
+  }
+]
+
+```
+
+```shell
+$ curl -v -X PATCH -H "Content-Type: application/json-patch+json" --data-binary @json-patch-account.json http://localhost:3001/accounts/3
+```
+
+[JSON Merge Patch](https://tools.ietf.org/html/rfc7396) format
+
+_Note: if using the X2 RESTful API Tester make sure `application/merge-patch+json` is present in the 'Content Type' form field.)_:
+
+```shell
+$ curl -v -X PATCH -H "Content-Type: application/merge-patch+json" --data-binary @json-merge-patch-account.json http://localhost:3001/accounts/3
 ```
 
 ### Backend Operations

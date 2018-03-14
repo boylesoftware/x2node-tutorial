@@ -10,8 +10,8 @@
     "x2node-dbos-monitor-dbtable": "^1.1.0",
     "x2node-records": "^2.3.1",
     "x2node-validators": "^1.4.0",
-    "x2node-ws": "^1.4.0",
-    "x2node-ws-auth-jwt": "^1.1.10",
-    "x2node-ws-resources": "^1.8.0"
+    "x2node-ws": "^1.4.1",
+    "x2node-ws-auth-jwt": "^1.1.11",
+    "x2node-ws-resources": "^1.8.1"
   }
 }
